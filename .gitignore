@@ -1,3 +1,9 @@
+# cmake build driectory
+build/*
+
+# vscode settings
+.vscode/*
+
 # Prerequisites
 *.d
 

@@ -1,2 +1,2 @@
 # miniTCP
-A mini protocol stack built on libpcap
+A mini network protocol stack built upon libpcap.
