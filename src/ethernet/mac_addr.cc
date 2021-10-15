@@ -24,10 +24,11 @@ MacAddress::MacAddress(const struct ether_addr& other) {
 
 int MacAddress::GetAddressByDevice(const char* device_name) {
     struct ifaddrs *ifa_begin, *ifaddr;
-    int status = getifaddrs(&ifa_begin);
 
+    int status = getifaddrs(&ifa_begin);
     MINITCP_ASSERT_EQ(status, 0) << "getifaddrs error " << std::endl;
 
+    int found = 0;
     for (ifaddr = ifa_begin; ifaddr != NULL; ifaddr = ifaddr->ifa_next) {
         if ((ifaddr->ifa_addr->sa_family == AF_LINK) &&
             strcmp(ifaddr->ifa_name, device_name) == 0) {
@@ -38,13 +39,18 @@ int MacAddress::GetAddressByDevice(const char* device_name) {
                 mac_addr_.octet[i] = address[i];
             }
 
-            return 0;
+            found = 1;
+            break;
         }
     }
 
-    MINITCP_LOG(ERROR) << "get mac address by device error: " << device_name
-                       << " not found." << std::endl;
-    return -1;
+    if (!found) {
+        MINITCP_LOG(ERROR) << "get mac address by device error: " << device_name
+                           << " not found." << std::endl;
+    }
+
+    freeifaddrs(ifa_begin);
+    return (found == 1);
 }
 
 bool MacAddress::operator==(const MacAddress& other) const {
