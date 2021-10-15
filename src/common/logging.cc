@@ -1,9 +1,9 @@
-#include "logging.h"
-
 #include <chrono>
 #include <ctime>
 #include <iomanip>
 #include <iostream>
+
+#include "logging.h"
 
 namespace minitcp {
 char LogMessage::kLogLevelName[6][10] = {"Trace",   "Debug", "Info",
