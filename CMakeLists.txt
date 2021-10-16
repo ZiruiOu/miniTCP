@@ -9,14 +9,13 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED on)
 set(CMAKE_CXX_EXTENSION off)
 
-# Include libpcap
-include("${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/libpcap/FindPCAP.cmake")
+# include("${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/libpcap/FindPCAP.cmake")
 # Add subdirectory src.
 add_subdirectory(src)
 # Add subdirectory 3rdparty
-include(FetchContent)
 add_subdirectory(3rdparty)
 
+# Fetch Googletest from gitee mirror
 option(ENABLE_UNIT_TESTS on)
 
 set(ENABLE_UNIT_TESTS on)
@@ -31,7 +30,6 @@ if (ENABLE_UNIT_TESTS)
         PRIVATE
             gtest_main
             utilities
-            ethernet
     )
     enable_testing()
     add_test(
@@ -76,23 +74,23 @@ if (ENABLE_UNIT_TESTS)
     add_executable(test_ethernet "")
     target_sources(test_ethernet
         PRIVATE
-            src/ethernet/mac_addr_test.cc
+            src/ethernet/macaddr_test.cc
     )
     target_link_libraries(test_ethernet
         PRIVATE
             gtest_main
             utilities
             ethernet
+            ${PCAP_LIBRARY}
     )
     enable_testing()
     add_test(
         NAME test_ethernet
         COMMAND $<TARGET_FILE:test_ethernet>
     )
-    
 endif()
 
-add_executable(main main.cc)
+add_executable(main src/application/link_send.cc)
 target_link_libraries(main
     PRIVATE
         utilities
