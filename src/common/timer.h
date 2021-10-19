@@ -33,7 +33,7 @@ class Timer {
         auto task = std::bind(std::forward<F>(function),
                               std::forward<Args>(arguments)...);
         {
-            std::scoped_lock(timer_mutex_);
+            std::scoped_lock lock(timer_mutex_);
             if (this->stop_) {
                 MINITCP_LOG(ERROR)
                     << "Timer: adding task into a stopped timer!" << std::endl;
