@@ -143,9 +143,8 @@ int EthernetDevice::InitPcapHandler() {
     char err_buffer[PCAP_ERRBUF_SIZE];
 
     pcap_handler_ = pcap_create(device_name_.c_str(), err_buffer);
-    MINITCP_ASSERT(pcap_handler_)
-        << "pcap_create error: " << device_name_ << " " << err_buffer
-        << pcap_geterr(pcap_handler_) << std::endl;
+    MINITCP_ASSERT(pcap_handler_) << "pcap_create error: " << device_name_
+                                  << " " << err_buffer << std::endl;
 
     // timeout
     status = pcap_set_timeout(pcap_handler_, kPcapTimeout);
