@@ -2,13 +2,16 @@
 #define MINITCP_SRC_ETHERNET_DEVICE_IMPL_H_
 
 #include <arpa/inet.h>
+#include <ifaddrs.h>
 #include <net/ethernet.h>
 #include <pcap.h>
+#include <sys/types.h>
 
 #include <cstring>
 #include <iostream>
 #include <string>
 
+#include "../common/constant.h"
 #include "../common/logging.h"
 #include "../common/types.h"
 #include "ethkernel.h"
@@ -30,8 +33,8 @@ class DeviceBase {
 
 class EthernetDevice : public DeviceBase {
    public:
-    explicit EthernetDevice(const std::string& device_name);
-    EthernetDevice(const std::string& device_name, const mac_t& mac_addr);
+    explicit EthernetDevice(const std::string&);
+    EthernetDevice(const std::string&, const mac_t&, const ip_t&);
     ~EthernetDevice();
 
     // no copy and no move, in case of double free caused by copy & move.
@@ -44,16 +47,14 @@ class EthernetDevice : public DeviceBase {
                   int ethernet_type, const void* dest_mac) override;
     void ReceivePoll() override;
 
-    int InitMacAddress();
-    int InitIpAddress();
-
     const std::string& GetName() const override { return device_name_; }
 
-    // void SetFrameReceiveCallback(frameReceiveCallback callback) {
-    //     callback_public_ = callback;
-    // }
-
     friend class EthernetKernel;
+
+   protected:
+    int InitMacAddress();
+    int InitIpAddress();
+    int InitPcapHandler();
 
    private:
     mac_t mac_addr_;

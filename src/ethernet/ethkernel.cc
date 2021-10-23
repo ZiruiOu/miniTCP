@@ -34,7 +34,7 @@ int EthernetKernel::AddDevice(std::string& device_name) {
 
     struct epoll_event device_event;
     device_event.events = EPOLLIN | EPOLLET;
-    device_event.data.fd = pcap_fd;
+    device_event.data.fd = device_id;
     int status = epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, pcap_fd, &device_event);
     MINITCP_ASSERT(status != -1)
         << "Ethernet Kernel AddDevice error: cannot register device "
@@ -119,14 +119,14 @@ void EthernetKernel::Start() {
 
             for (int i = 0; i < num_ready; i++) {
                 int device_id = events[i].data.fd;
-                auto device_ptr = this->devices[i];
+                auto device_ptr = this->devices[device_id];
                 pcap_t* device_handler = device_ptr->pcap_handler_;
 
                 packet_data = pcap_next(device_handler, &packet_header);
                 if (packet_data != NULL) {
                     if (this->kernel_callback_) {
                         this->kernel_callback_(packet_data,
-                                               packet_header.caplen, i);
+                                               packet_header.caplen, device_id);
                     }
                 }
             }

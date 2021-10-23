@@ -96,8 +96,9 @@ class Timer {
         return SetTimeoutAt(expire_time, function, arguments...);
     }
 
-    tempate<class F, class... Args> std::optional<std::size_t> SetTimeoutAt(
-        timestamp_t timestamp, F&& function, Args&&... arguments) {
+    template <class F, class... Args>
+    std::optional<std::size_t> SetTimeoutAt(timestamp_t timestamp, F&& function,
+                                            Args&&... arguments) {
         std::size_t handler_id;
         MINITCP_LOG(INFO) << "Timer: add timeout at "
                           << timestamp.time_since_epoch().count() << std::endl;

@@ -3,6 +3,9 @@
 
 #include <functional>
 
+#include "timer_impl.h"
+
+namespace minitcp {
 #ifdef __cplusplus
 extern "C" {
 #endif  // ! __cplusplus
@@ -10,5 +13,6 @@ extern "C" {
 #ifdef __cplusplus
 }
 #endif  // ! __cplusplus
+}  // namespace minitcp
 
 #endif  // ! MINITCP_SRC_COMMON_TIMER_H_

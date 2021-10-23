@@ -5,6 +5,13 @@
 
 namespace minitcp {
 
+// pcap parameters
+// snap len
+const int kPcapSnapLen = 65536;
+// timeout
+const int kPcapTimeout = -1;
+
+// epoll parameters
 // epoll concurrent events
 const int kMaxConcurrentEvents = 200;
 

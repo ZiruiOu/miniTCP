@@ -5,7 +5,6 @@ add_library(ethernet
         device.cc
         device_impl.cc
         ethkernel.cc
-        framefactory.cc
         packetio.cc
 )
 
