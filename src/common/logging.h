@@ -62,8 +62,10 @@ class FatalLogMessage : public LogMessage {
 #define MINITCP_ASSERT_EQ(a, b) MINITCP_ASSERT((a) == (b))
 #define MINITCP_ASSERT_NE(a, b) MINITCP_ASSERT((a) != (b))
 #define MINITCP_ASSERT_LT(a, b) MINITCP_ASSERT((a) < (b))
+#define MINITCP_ASSERT_GE(a, b) MINITCP_ASSERT((a) >= (b))
 #define MINITCP_ASSERT_GT(a, b) MINITCP_ASSERT((a) > (b))
+#define MINITCP_ASSERT_LE(a, b) MINITCP_ASSERT((a) <= (b))
 
 }  // namespace minitcp
 
-#endif  // !MINITCP_SRC_COMMON_LOGGING_H_
+#endif  // ! MINITCP_SRC_COMMON_LOGGING_H_

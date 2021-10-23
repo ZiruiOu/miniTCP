@@ -1,13 +1,16 @@
+#include "logging.h"
+
 #include <chrono>
 #include <ctime>
 #include <iomanip>
 #include <iostream>
-
-#include "logging.h"
+#include <mutex>
 
 namespace minitcp {
 char LogMessage::kLogLevelName[6][10] = {"Trace",   "Debug", "Info",
                                          "Warning", "Error", "Fatal"};
+
+static std::mutex write_mutex_;
 
 LogMessage::LogMessage(const char* filename, int lineno, LogLevel severity)
     : filename_(filename), lineno_(lineno), severity_(severity) {}
@@ -32,10 +35,13 @@ void LogMessage::ShowLoggingMessage() {
     std::ostream& out_stream =
         (severity_ <= MINITCP_SEVERITY) ? std::cout : std::cerr;
 
-    out_stream << "[" << time_buffer << "." << std::setw(6)
-               << microseconds.count() << ": "
-               << LogMessage::kLogLevelName[static_cast<int32_t>(severity_)]
-               << " " << filename_ << ": " << lineno_ << "] " << str();
+    {
+        std::scoped_lock lock(write_mutex_);
+        out_stream << "[" << time_buffer << "." << std::setw(6)
+                   << std::setfill('0') << microseconds.count() << ": "
+                   << LogMessage::kLogLevelName[static_cast<int32_t>(severity_)]
+                   << " " << filename_ << ": " << lineno_ << "] " << str();
+    }
 }
 
 FatalLogMessage::FatalLogMessage(const char* filename, int lineno)

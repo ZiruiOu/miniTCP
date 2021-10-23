@@ -5,6 +5,15 @@
 
 namespace minitcp {
 
+// epoll concurrent events
+const int kMaxConcurrentEvents = 200;
+
+// ethernet type
+const std::uint16_t kEtherIPv4Type = 0x0800;
+const std::uint16_t kEtherArpType = 0x0806;
+// FIXME : not a formal one
+const std::uint16_t kEtherRouteType = 0x0900;
+
 // reserve some handler id for some special service
 const std::size_t kReservedHandlerId = 6;
 

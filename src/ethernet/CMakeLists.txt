@@ -3,8 +3,10 @@ project(link)
 add_library(ethernet
     STATIC
         device.cc
+        device_impl.cc
+        ethkernel.cc
         framefactory.cc
-        macaddr.cc
+        packetio.cc
 )
 
 target_include_directories(ethernet

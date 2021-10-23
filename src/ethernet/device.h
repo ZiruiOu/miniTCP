@@ -1,52 +1,46 @@
 #ifndef MINITCP_SRC_ETHERNET_DEVICE_H_
 #define MINITCP_SRC_ETHERNET_DEVICE_H_
 
-#include <arpa/inet.h>
-#include <cstring>
-#include <pcap.h>
-#include <iostream>
-#include <net/ethernet.h>
 #include <string>
 
-#include "../common/logging.h"
-#include "macaddr.h"
+#include "device_impl.h"
 
 namespace minitcp {
 namespace ethernet {
-class DeviceBase {
-   public:
-    DeviceBase(){};
-    ~DeviceBase(){};
 
-    virtual int SendFrame(const std::uint8_t* buffer, std::size_t length,
-                          int ethernet_type, MacAddress dest_mac) = 0;
-    virtual void ReceivePoll() = 0;
-};
+#ifdef __cplusplus
+extern "C" {
+#endif  // ! __cplusplus
 
-class EthernetDevice : public DeviceBase {
-   public:
-    explicit EthernetDevice(const std::string& device_name);
-    EthernetDevice(const std::string& device_name, const mac_t& mac_addr);
-    ~EthernetDevice();
+/**
+ * Add a device to the library for sending/receiving packets. *
+ * @param device Name of network device to send/receive packet on.
+ * @return A non-negative _device-ID_ on success, -1 on error. */
+int addDevice(const char* device);
 
-    int SendFrame(const std::uint8_t* buffer, std::size_t length,
-                  int ethernet_type, MacAddress dest_mac) override;
-    void ReceivePoll() override;
+/**
+ * Find a device added by ‘addDevice‘. *
+ * @param device Name of the network device.
+ * @return A non-negative _device-ID_ on success, -1 if no such device
+ * was found. */
+int findDevice(const char* device);
 
-    // no copy and move
-    EthernetDevice(const EthernetDevice&) = delete;
-    EthernetDevice& operator=(const EthernetDevice&) = delete;
-    EthernetDevice(EthernetDevice&&) = delete;
-    EthernetDevice& operator=(EthernetDevice&&) = delete;
+/**
+ * Get the pointer of the DeviceCOntrolBlock
+ * @param id id of the device
+ * @return The pointer of the corresponding device on success, NULL if no such
+ * device exists. */
+class EthernetDevice* getDevicePointer(int id);
 
-   private:
-    MacAddress mac_addr_;
-    std::string device_name_;
+/**
+ * Start the ethernet kernel
+ *
+ */
+void start();
 
-    pcap_t* pcap_handler_;
-};
-
+#ifdef __cplusplus
+}
+#endif  // ! __cplusplus
 }  // namespace ethernet
 }  // namespace minitcp
-
-#endif  //! MINITCP_SRC_ETHERNET_DEVICE_H_
+#endif  // ! MINITCP_SRC_ETHERNET_DEVICE_H_
