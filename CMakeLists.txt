@@ -2,31 +2,25 @@ cmake_minimum_required(VERSION 3.14)
 
 project(miniTCP)
 
+
 set(CMAKE_POSITION_INDEPENDENT_CODE on)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED on)
 set(CMAKE_CXX_EXTENSION off)
 
-# Include libpcap
-include("${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/libpcap/FindPCAP.cmake")
+# include("${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/libpcap/FindPCAP.cmake")
+# Add subdirectory 3rdparty
+add_subdirectory(3rdparty)
 # Add subdirectory src.
 add_subdirectory(src)
 
+# Fetch Googletest from gitee mirror
 option(ENABLE_UNIT_TESTS on)
 
 set(ENABLE_UNIT_TESTS on)
 message(STATUS "Enabling unit test : ${ENABLE_UNIT_TESTS}")
 if (ENABLE_UNIT_TESTS)
-    # Fetch gtest from mirror.
-    include(FetchContent)
-    FetchContent_Declare(
-        googletest
-        GIT_REPOSITORY https://codechina.csdn.net/mirrors/google/googletest
-        GIT_TAG release-1.11.0
-    )
-    FetchContent_MakeAvailable(googletest)
-
     add_executable(test_gtest "")
     target_sources(test_gtest
         PRIVATE
@@ -43,22 +37,43 @@ if (ENABLE_UNIT_TESTS)
         COMMAND $<TARGET_FILE:test_gtest>
     )
 
-    add_executable(test_common "")
-    target_sources(test_common
+    add_executable(test_gmock "")
+    target_sources(test_gmock
         PRIVATE
-            src/common/logging_test.cc
+        test_gmock.cc
     )
-    target_link_libraries(test_common
+
+    target_link_libraries(test_gmock
         PRIVATE
-            gtest_main
+            gmock_main
             utilities
+            ethernet
     )
     enable_testing()
     add_test(
-        NAME test_common
-        COMMAND $<TARGET_FILE:test_common>
+        NAME test_gmock
+        COMMAND $<TARGET_FILE:test_gmock>
     )
-    # Fetch gmock from gitlab
 endif()
 
-add_executable(main main.cc)
+add_executable(link_send src/application/link/link_send.cc)
+target_link_libraries(link_send
+    PRIVATE
+        utilities
+        ethernet
+        ${PCAP_LIBRARY}
+)
+add_executable(link_recv src/application/link/link_recv.cc)
+target_link_libraries(link_recv
+    PRIVATE
+        utilities
+        ethernet
+        ${PCAP_LIBRARY}
+)
+add_executable(link_app src/application/link/link_app.cc)
+target_link_libraries(link_app
+    PRIVATE
+        utilities
+        ethernet
+        ${PCAP_LIBRARY}
+)
