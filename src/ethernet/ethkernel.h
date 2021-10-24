@@ -24,8 +24,9 @@ class EthernetKernel {
     EthernetKernel(EthernetKernel&&) = delete;
     EthernetKernel& operator=(EthernetKernel&&) = delete;
 
-    int AddDevice(std::string& device_name);
-    int FindDevice(std::string& device_name);
+    int AddDevice(const std::string& device_name);
+    int AddAllDevices(const std::string& start_with_prefix);
+    int FindDevice(const std::string& device_name);
     class EthernetDevice* GetDevicePointer(int id);
     int SendFrame(const void* buf, int len, int ethtype, const void* destmac,
                   int id);

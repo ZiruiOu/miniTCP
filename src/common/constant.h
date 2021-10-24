@@ -15,6 +15,9 @@ const int kPcapTimeout = -1;
 // epoll concurrent events
 const int kMaxConcurrentEvents = 200;
 
+// epoll stdin fd
+const int kEpollStdinFd = -1;
+
 // ethernet type
 const std::uint16_t kEtherIPv4Type = 0x0800;
 const std::uint16_t kEtherArpType = 0x0806;

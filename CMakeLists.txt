@@ -56,8 +56,22 @@ if (ENABLE_UNIT_TESTS)
     )
 endif()
 
-add_executable(main src/application/link_send.cc)
-target_link_libraries(main
+add_executable(link_send src/application/link/link_send.cc)
+target_link_libraries(link_send
+    PRIVATE
+        utilities
+        ethernet
+        ${PCAP_LIBRARY}
+)
+add_executable(link_recv src/application/link/link_recv.cc)
+target_link_libraries(link_recv
+    PRIVATE
+        utilities
+        ethernet
+        ${PCAP_LIBRARY}
+)
+add_executable(link_app src/application/link/link_app.cc)
+target_link_libraries(link_app
     PRIVATE
         utilities
         ethernet

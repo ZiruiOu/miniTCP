@@ -33,6 +33,14 @@ int findDevice(const char* device);
 class EthernetDevice* getDevicePointer(int id);
 
 /**
+ * Add all network interface into the ethernet kernel
+ * @param start_with_prefix the name of the devices should start with
+ * start_wit_prefix
+ * @return 0 on success, -1 if fail.
+ **/
+int addAllDevices(const char* start_with_prefix);
+
+/**
  * Start the ethernet kernel
  *
  */

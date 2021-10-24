@@ -34,35 +34,21 @@ int LinkCallback(const void *buffer, int length, int device_id) {
 int main(int argc, char *argv[]) {
     ethernet::setFrameReceiveCallback(LinkCallback);
 
-    if (strcmp(argv[1], "send") == 0) {
-        int fd = ethernet::addDevice(argv[2]);
-        ethernet::start();
+    int fd = ethernet::addDevice(argv[2]);
 
-        MINITCP_LOG(DEBUG) << "ethernet kernel register" << argv[2]
-                           << " with device id " << fd << std::endl;
+    MINITCP_LOG(DEBUG) << "ethernet kernel register " << argv[2]
+                       << " with device id " << fd << std::endl;
 
-        char buffer[60] = {};
-        sprintf(buffer, "Hello World! This is greeting from %s", argv[2]);
+    char buffer[60] = {};
+    sprintf(buffer, "Hello World! This is greeting from %s", argv[2]);
 
-        mac_t dest_mac;
-        MINITCP_ASSERT(ether_aton_r(argv[3], &dest_mac))
-            << "ether_aton_r error: parse address " << argv[3] << " fail."
-            << std::endl;
+    mac_t dest_mac;
+    MINITCP_ASSERT(ether_aton_r(argv[3], &dest_mac))
+        << "ether_aton_r error: parse address " << argv[3] << " fail."
+        << std::endl;
 
-        ethernet::sendFrame(buffer, std::strlen(buffer),
-                            0x5555 /* just for test */, (const void *)&dest_mac,
-                            fd);
+    ethernet::sendFrame(buffer, std::strlen(buffer), 0x5555 /* just for test */,
+                        (const void *)&dest_mac, fd);
 
-        std::this_thread::sleep_for(std::chrono::seconds(5));
-
-    } else {
-        int fd1 = ethernet::addDevice("veth3-0");
-        int fd2 = ethernet::addDevice("veth3-2");
-        int fd3 = ethernet::addDevice("veth3-4");
-
-        ethernet::start();
-        while (1)
-            ;
-    }
     return 0;
 }
