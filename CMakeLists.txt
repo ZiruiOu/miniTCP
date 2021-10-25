@@ -36,24 +36,6 @@ if (ENABLE_UNIT_TESTS)
         NAME test_gtest
         COMMAND $<TARGET_FILE:test_gtest>
     )
-
-    add_executable(test_gmock "")
-    target_sources(test_gmock
-        PRIVATE
-        test_gmock.cc
-    )
-
-    target_link_libraries(test_gmock
-        PRIVATE
-            gmock_main
-            utilities
-            ethernet
-    )
-    enable_testing()
-    add_test(
-        NAME test_gmock
-        COMMAND $<TARGET_FILE:test_gmock>
-    )
 endif()
 
 add_executable(link_send src/application/link/link_send.cc)
