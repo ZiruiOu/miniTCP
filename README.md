@@ -16,64 +16,80 @@ cmake ..
 make
 ```
 
-Checkpoint 1:
+##### Checkpoint 1: 
+
+To run the demo, first use the following command to activate the NS environment.
+
+```shell
+bash script/install_ckpt1.sh
+```
 
 
 
-Checkpoint 2:
+Run following command to enter ns#3.
 
-To run the demo, please first use
+```shell
+bash script/enter_ns3.sh
+```
+
+
+
+To see the demo, please enter the build director in the root of miniTCP and run the following command.
+
+```shell
+./link_find
+```
+
+
+
+You can see the result of devices like this, which implies that the ethernet kernel successfully find all devices.
+
+![checkpoint1](/home/cycloidzzz/CodeProject/miniTCP/demo/checkpoint1.jpg)
+
+
+
+##### Checkpoint 2:
+
+To run the demo, use the following command to activate the NS environment.
 
 ```shell
 bash script/install_ckpt2.sh
 ```
 
-to install the NS environment.
-
-
-
-You can run 
+Run following command to enter ns#1 in one terminal (namely, terminal#1).
 
 ```shell
 bash script/enter_ns1.sh
 ```
 
-to enter ns#1 in one terminal. And run
+Run following command on another terminal (namely, terminal#2) to enter ns#2.
 
 ```shell
 bash script/etner_ns2.sh
 ```
 
-to enter ns#2 in another terminal.
 
 
+If you want to send a greeting message from veth 1-2 (in terminal#1) to veth 2-1 (in terminal#2).  
 
-The topology of ns#1 and ns#2 follows the example in vnetUtils.
-
-If you want to send message from one veth to another, first enter the **build directory in miniTCP**, then you can run 
+First start a listening application on terminal#2 by running
 
 ```shell
-./link_app
+./link_recv
 ```
 
-to run the applications on both of the terminals.
 
 
-
-To send a message from veth 1-2 to veth 2-1, you can input the message in the form as the user prompt goes.
-
-```
-sender_device_name receiver_mac_address message
-```
-
-the message ends when you press the 'enter' key and will be sent to the receiver.
-
-
-
-For example, if you want to send a message "Hello, How are you?" from veth 1-2 (in terminal#1) to veth 2-1 (in terminal#2), you can enter something like this on terminal#1.
+Suppose the mac address of destination (veth 2-1) is 52:ee:51:6f:18:ff, you can send the message by running on terminal#1.
 
 ```shell
-veth1-2 52:ee:51:6f:18:ff Hello, How are you?
+./link_send veth1-2 52:ee:51:6f:18:ff
 ```
 
-the device veth 2-1 will receive this message and use a callback function to print out the message received.
+
+
+And the device veth 2-1 will receive this message and use a callback function to print out the message received.
+
+The result of the checkpoint 2.
+
+![checkpoint2](/home/cycloidzzz/CodeProject/miniTCP/demo/checkpoint2.jpg)
