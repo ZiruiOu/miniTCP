@@ -16,7 +16,15 @@ cmake ..
 make
 ```
 
-##### Checkpoint 1: 
+##### Note:
+
+The network topology we use in checkpoint 1 and checkpoint 2 is exactly **the same as the example** given in the vnetUtils.
+
+![topology](./demo/topology.png)
+
+
+
+##### Checkpoint 1:  Show that your implementation can detect network interfaces on the host.
 
 To run the demo, first use the following command to activate the NS environment.
 
@@ -30,6 +38,14 @@ Run following command to enter ns#3.
 
 ```shell
 bash script/enter_ns3.sh
+```
+
+
+
+To go back to the **build directory in miniTCP** after executing the bash script , please run the following command in the terminal.
+
+```
+cd ../../../build
 ```
 
 
@@ -48,7 +64,7 @@ You can see the result of devices like this, which implies that the ethernet ker
 
 
 
-##### Checkpoint 2:
+##### Checkpoint 2:  Show that your implementation can capture frames from a device and inject frames to a device using libpcap.
 
 To run the demo, use the following command to activate the NS environment.
 
@@ -70,7 +86,13 @@ bash script/etner_ns2.sh
 
 
 
-If you want to send a greeting message from veth 1-2 (in terminal#1) to veth 2-1 (in terminal#2).  
+To show that we can inject frames to a device as well as capture frames from a device, our demo is sending a greeting message from one terminal to another.
+
+
+
+For example,  If you want to send a greeting message from veth 1-2 (in terminal#1) to veth 2-1 (in terminal#2).  
+
+
 
 First start a listening application on terminal#2 by running
 
