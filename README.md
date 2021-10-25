@@ -44,7 +44,7 @@ To see the demo, please enter the build director in the root of miniTCP and run 
 
 You can see the result of devices like this, which implies that the ethernet kernel successfully find all devices.
 
-![checkpoint1](/home/cycloidzzz/CodeProject/miniTCP/demo/checkpoint1.jpg)
+![checkpoint1](./demo/checkpoint1.jpg)
 
 
 
@@ -92,4 +92,4 @@ And the device veth 2-1 will receive this message and use a callback function to
 
 The result of the checkpoint 2.
 
-![checkpoint2](/home/cycloidzzz/CodeProject/miniTCP/demo/checkpoint2.jpg)
+![checkpoint2](./demo/checkpoint2.jpg)
