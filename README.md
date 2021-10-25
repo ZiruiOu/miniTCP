@@ -37,7 +37,7 @@ bash script/enter_ns3.sh
 To see the demo, please enter the build director in the root of miniTCP and run the following command.
 
 ```shell
-./link_find
+./link_app
 ```
 
 
