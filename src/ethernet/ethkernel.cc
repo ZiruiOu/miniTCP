@@ -65,8 +65,9 @@ int EthernetKernel::AddAllDevices(const std::string& start_with_prefix) {
     for (netif = netif_devices; netif != NULL; netif = netif->next) {
         if (std::strncmp(netif->name, start_with_prefix.c_str(),
                          start_with_prefix.size()) == 0) {
-            MINITCP_LOG(INFO)
-                << "EthernetKernel: adding device " << netif->name << std::endl;
+            // MINITCP_LOG(INFO)
+            //     << "EthernetKernel: adding device " << netif->name <<
+            //     std::endl;
             std::string device_name = std::string(netif->name);
             AddDevice(device_name);
         }

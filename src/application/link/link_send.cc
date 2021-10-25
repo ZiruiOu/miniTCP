@@ -34,17 +34,17 @@ int LinkCallback(const void *buffer, int length, int device_id) {
 int main(int argc, char *argv[]) {
     ethernet::setFrameReceiveCallback(LinkCallback);
 
-    int fd = ethernet::addDevice(argv[2]);
+    int fd = ethernet::addDevice(argv[1]);
 
-    MINITCP_LOG(DEBUG) << "ethernet kernel register " << argv[2]
+    MINITCP_LOG(DEBUG) << "ethernet kernel register " << argv[1]
                        << " with device id " << fd << std::endl;
 
     char buffer[60] = {};
-    sprintf(buffer, "Hello World! This is greeting from %s", argv[2]);
+    sprintf(buffer, "Hello World! This is greeting from %s", argv[1]);
 
     mac_t dest_mac;
-    MINITCP_ASSERT(ether_aton_r(argv[3], &dest_mac))
-        << "ether_aton_r error: parse address " << argv[3] << " fail."
+    MINITCP_ASSERT(ether_aton_r(argv[2], &dest_mac))
+        << "ether_aton_r error: parse address " << argv[2] << " fail."
         << std::endl;
 
     ethernet::sendFrame(buffer, std::strlen(buffer), 0x5555 /* just for test */,

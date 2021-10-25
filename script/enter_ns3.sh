@@ -1,3 +1,2 @@
 cd 3rdparty/vnetUtils/helper
-sudo ./delNS vr
-cd ../../..
+sudo bash ./execNS ns3 bash

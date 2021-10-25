@@ -96,8 +96,9 @@ int EthernetDevice::InitMacAddress() {
             struct ether_addr* ifa_mac_addr =
                 reinterpret_cast<struct ether_addr*>(link_addr->sll_addr);
             std::memcpy(&mac_addr_, ifa_mac_addr, sizeof(mac_t));
-            MINITCP_LOG(INFO) << "EthernetDevice: Device " << device_name_
-                              << " successfully get mac address " << std::endl;
+            // MINITCP_LOG(INFO) << "EthernetDevice: Device " << device_name_
+            //                   << " successfully get mac address " <<
+            //                   std::endl;
             found = 1;
             break;
         }
@@ -123,8 +124,9 @@ int EthernetDevice::InitIpAddress() {
             struct sockaddr_in* inet_addr =
                 reinterpret_cast<struct sockaddr_in*>(ifa->ifa_addr);
             ip_addr_ = inet_addr->sin_addr;
-            MINITCP_LOG(INFO) << "EthernetDevice: Device " << device_name_
-                              << " successfully get ip address " << std::endl;
+            // MINITCP_LOG(INFO) << "EthernetDevice: Device " << device_name_
+            //                   << " successfully get ip address " <<
+            //                   std::endl;
             found = 1;
             break;
         }
