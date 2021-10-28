@@ -59,3 +59,11 @@ target_link_libraries(link_app
         ethernet
         ${PCAP_LIBRARY}
 )
+add_executable(arp src/application/arp/arp.cc)
+target_link_libraries(arp
+    PRIVATE
+        utilities
+        ethernet
+        network
+        ${PCAP_LIBRARY}
+)

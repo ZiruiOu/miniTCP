@@ -33,6 +33,12 @@ const int kMaxEpollEvent = 40;
 // for ethernet transmission
 const int kFramePayloadSize = 1500;
 
+// for arp aging
+const int kMaxArpAging = 10;
+// for arp type
+const std::uint16_t kArpTypeRequest = 1;
+const std::uint16_t kArpTypeReply = 2;
+
 // for ip transmission
 
 // for tcp transmission
