@@ -48,6 +48,8 @@ class EthernetDevice : public DeviceBase {
     void ReceivePoll() override;
 
     const std::string& GetName() const override { return device_name_; }
+    mac_t GetMacAddress() const { return mac_addr_; }
+    ip_t GetIpAddress() const { return ip_addr_; }
 
     friend class EthernetKernel;
 

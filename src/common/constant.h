@@ -7,7 +7,7 @@ namespace minitcp {
 
 // pcap parameters
 // snap len
-const int kPcapSnapLen = 65536;
+const int kPcapSnapLen = 3000;
 // timeout
 const int kPcapTimeout = -1;
 
@@ -34,7 +34,7 @@ const int kMaxEpollEvent = 40;
 const int kFramePayloadSize = 1500;
 
 // for arp aging
-const int kMaxArpAging = 10;
+const int kMaxArpAging = 4;
 // for arp type
 const std::uint16_t kArpTypeRequest = 1;
 const std::uint16_t kArpTypeReply = 2;

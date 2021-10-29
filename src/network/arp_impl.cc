@@ -92,7 +92,7 @@ int ArpTable::SendArp(ip_t peer_ip, std::uint16_t arp_type, bool broadcast) {
             *(ip_t *)(buffer + 24) = entry.peer_ip;
             if (status == 0) {
                 status = ethernet::sendFrame(buffer, 28, kEtherArpType,
-                                             &entry.peer_mac, entry.local_id);
+                                             &(entry.peer_mac), entry.local_id);
             }
             delete[] buffer;
         }
@@ -116,7 +116,7 @@ int ArpTable::AgingArpTable() {
                 << "AgingArpTable: arp entry with ip address "
                 << inet_ntoa((*iter).peer_ip)
                 << " is removing from the arp table." << std::endl;
-            arp_table_.erase(iter++);
+            iter = arp_table_.erase(iter);
         } else {
             iter++;
         }

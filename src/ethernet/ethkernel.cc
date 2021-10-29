@@ -141,48 +141,49 @@ void EthernetKernel::Start() {
     //    worker.detach();
     //}
 
-    // std::thread epoll_worker = std::thread([this]() {
-    int result;
-    struct pcap_pkthdr packet_header;
-    const u_char* packet_data;
-    struct epoll_event events[kMaxConcurrentEvents];
+    std::thread epoll_worker = std::thread([this]() {
+        int result;
+        struct pcap_pkthdr packet_header;
+        const u_char* packet_data;
+        struct epoll_event events[kMaxConcurrentEvents];
 
-    while (true) {
-        int num_ready = epoll_wait(epoll_fd_, events, kMaxConcurrentEvents, -1);
+        while (true) {
+            int num_ready =
+                epoll_wait(epoll_fd_, events, kMaxConcurrentEvents, -1);
 
-        for (int i = 0; i < num_ready; i++) {
-            int device_id = events[i].data.fd;
+            for (int i = 0; i < num_ready; i++) {
+                int device_id = events[i].data.fd;
 
-            if (device_id == kEpollStdinFd) {
-                std::string device_name, address;
-                std::cin >> device_name >> address;
-                char content[1000];
-                scanf("%[^\n\n\r]", content);
-                content[999] = 0;
+                if (device_id == kEpollStdinFd) {
+                    std::string device_name, address;
+                    std::cin >> device_name >> address;
+                    char content[1000];
+                    scanf("%[^\n\n\r]", content);
+                    content[999] = 0;
 
-                mac_t dest_address;
-                ether_aton_r(address.c_str(), &dest_address);
+                    mac_t dest_address;
+                    ether_aton_r(address.c_str(), &dest_address);
 
-                device_id = FindDevice(device_name);
-                this->SendFrame(content, std::strlen(content), 0x1551,
-                                &dest_address, device_id);
+                    device_id = FindDevice(device_name);
+                    this->SendFrame(content, std::strlen(content), 0x1551,
+                                    &dest_address, device_id);
 
-            } else {
-                auto device_ptr = this->devices[device_id];
-                pcap_t* device_handler = device_ptr->pcap_handler_;
+                } else {
+                    auto device_ptr = this->devices[device_id];
+                    pcap_t* device_handler = device_ptr->pcap_handler_;
 
-                packet_data = pcap_next(device_handler, &packet_header);
-                if (packet_data != NULL) {
-                    if (this->kernel_callback_) {
-                        this->kernel_callback_(packet_data,
-                                               packet_header.caplen, device_id);
+                    packet_data = pcap_next(device_handler, &packet_header);
+                    if (packet_data != NULL) {
+                        if (this->kernel_callback_) {
+                            this->kernel_callback_(
+                                packet_data, packet_header.caplen, device_id);
+                        }
                     }
                 }
             }
         }
-    }
-    //});
-    // epoll_worker.detach();
+    });
+    epoll_worker.detach();
 }
 
 }  // namespace ethernet

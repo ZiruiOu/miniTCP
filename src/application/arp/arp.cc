@@ -2,6 +2,7 @@
 
 #include <arpa/inet.h>
 #include <net/ethernet.h>
+#include <string.h>
 
 #include <chrono>
 #include <cstdint>
@@ -24,15 +25,24 @@ int LinkCallback(const void *buffer, int length, int device_id) {
     mac_t *dest_mac = (struct ether_addr *)buffer;
     mac_t *src_mac = (struct ether_addr *)(buffer + 6);
     std::uint16_t ethernet_type = ntohs(*(std::uint16_t *)(buffer + 12));
+
     auto device_ptr = ethernet::getDevicePointer(device_id);
     MINITCP_ASSERT(device_ptr) << "getDevicePointer error" << std::endl;
-    std::cout << device_ptr->GetName() << std::endl;
+
+    mac_t device_mac = device_ptr->GetMacAddress();
+
+    char *packet_content = (char *)(buffer + 14);
+    MINITCP_ASSERT(device_ptr) << "getDevicePointer error" << std::endl;
+    std::cout << "device " << device_ptr->GetName() << " receive " << length
+              << " bytes, and the message is " << packet_content << std::endl;
 
     if (ethernet_type == kEtherArpType) {
-        network::receiveArpCallback(buffer + 14, 28, device_id);
+        if (std::strncmp((const char *)src_mac, (const char *)&device_mac,
+                         sizeof(device_mac)) != 0) {
+            network::receiveArpCallback(buffer + 14, 28, device_id);
+        }
     } else {
         char *packet_content = (char *)(buffer + 14);
-        auto device_ptr = ethernet::getDevicePointer(device_id);
         MINITCP_ASSERT(device_ptr) << "getDevicePointer error" << std::endl;
         std::cout << "device " << device_ptr->GetName() << " receive " << length
                   << " bytes, and the message is " << packet_content
@@ -48,7 +58,7 @@ int main(int argc, char *argv[]) {
     ethernet::start();
     while (true) {
         network::timerArpHandler();
-        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
     }
     return 0;
 }

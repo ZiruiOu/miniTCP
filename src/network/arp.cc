@@ -49,12 +49,12 @@ int receiveArpCallback(const void *arp_packet, int length, int device_id) {
 }
 
 void timerArpHandler() {
-    if (local_arp_timer_counter_ % 10 == 5) {
+    if (local_arp_timer_counter_ % 2 == 0) {
         sendArp(ip_t{0xffffffff}, kArpTypeRequest, 1);
     }
     local_arp_.AgingArpTable();
     local_arp_timer_counter_++;
-    if (local_arp_timer_counter_ >= 10) {
+    if (local_arp_timer_counter_ >= 4) {
         local_arp_timer_counter_ = 0;
     }
 }
