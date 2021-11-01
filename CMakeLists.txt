@@ -67,3 +67,11 @@ target_link_libraries(arp
         network
         ${PCAP_LIBRARY}
 )
+add_executable(route src/application/network/route.cc)
+target_link_libraries(route
+    PRIVATE
+        utilities
+        ethernet
+        network
+        ${PCAP_LIBRARY}
+)

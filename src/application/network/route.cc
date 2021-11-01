@@ -1,5 +1,3 @@
-#include "../ethernet/arp.h"
-
 #include <arpa/inet.h>
 #include <net/ethernet.h>
 #include <string.h>
@@ -15,8 +13,10 @@
 #include "../common/ipaddr.h"
 #include "../common/logging.h"
 #include "../common/macaddr.h"
+#include "../ethernet/arp.h"
 #include "../ethernet/device.h"
 #include "../ethernet/packetio.h"
+#include "../network/routing.h"
 
 using namespace minitcp;
 
@@ -35,7 +35,9 @@ int LinkCallback(const void *buffer, int length, int device_id) {
 
     if (std::strncmp((const char *)src_mac, (const char *)&device_mac,
                      sizeof(device_mac)) != 0) {
-        if (ethernet_type == kEtherArpType) {
+        if (ethernet_type == kEtherRouteType) {
+            network::receiveDVTableCallback(buffer + 14);
+        } else if (ethernet_type == kEtherArpType) {
             ethernet::receiveArpCallback(
                 buffer + 14, sizeof(ethernet::ArpHeader), device_id);
         } else {
@@ -52,8 +54,10 @@ int LinkCallback(const void *buffer, int length, int device_id) {
 int main(int argc, char *argv[]) {
     ethernet::setFrameReceiveCallback(LinkCallback);
     ethernet::addAllDevices("veth");
+    network::init();
     ethernet::start();
     while (true) {
+        network::timerRIPHandler();
         ethernet::timerArpHandler();
         std::this_thread::sleep_for(std::chrono::milliseconds(1000));
     }
