@@ -2,6 +2,8 @@
 
 #include <memory>
 
+#include "arp_impl.h"
+
 namespace minitcp {
 namespace ethernet {
 EthernetDevice::EthernetDevice(const std::string& device_name)
@@ -82,6 +84,24 @@ void EthernetDevice::ReceivePoll() {
     }
 }
 
+int EthernetDevice::SendArp(std::uint16_t arp_type, const void* dest_mac,
+                            const void* dest_ip) {
+    // TODO : add into common/conatsnt.h
+    struct ArpHeader packet;
+    packet.hw_type = htons(1);
+    packet.proto_type = htons(0x0800);
+    packet.hwaddr_length = 6;
+    packet.protoaddr_length = 4;
+    packet.operation = htons(arp_type);
+    packet.src_mac = mac_addr_;
+    packet.src_ip = ip_addr_;
+    packet.dest_mac = *(mac_t*)(dest_mac);
+    packet.dest_ip = *(ip_t*)(dest_ip);
+
+    return this->SendFrame(reinterpret_cast<std::uint8_t*>(&packet),
+                           sizeof(packet), kEtherArpType, dest_mac);
+}
+
 int EthernetDevice::InitMacAddress() {
     // use getifaddrs
     int found = 0;
@@ -123,7 +143,10 @@ int EthernetDevice::InitIpAddress() {
         if (sa_family == AF_INET && device_name_ == ifa->ifa_name) {
             struct sockaddr_in* inet_addr =
                 reinterpret_cast<struct sockaddr_in*>(ifa->ifa_addr);
+            struct sockaddr_in* inet_netmask =
+                reinterpret_cast<struct sockaddr_in*>(ifa->ifa_netmask);
             ip_addr_ = inet_addr->sin_addr;
+            netmask_ = inet_netmask->sin_addr;
             // MINITCP_LOG(INFO) << "EthernetDevice: Device " << device_name_
             //                   << " successfully get ip address " <<
             //                   std::endl;

@@ -6,6 +6,8 @@ add_library(ethernet
         device_impl.cc
         ethkernel.cc
         packetio.cc
+        arp.cc
+        arp_impl.cc
 )
 
 target_include_directories(ethernet

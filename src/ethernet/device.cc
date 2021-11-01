@@ -4,27 +4,42 @@
 
 namespace minitcp {
 namespace ethernet {
-class EthernetKernel ethernet_kernel_;
-
 int addDevice(const char* device) {
+    class EthernetKernel& kernel = EthernetKernel::GetInstance();
     std::string device_name = std::string(device);
-    return ethernet_kernel_.AddDevice(device_name);
+    return kernel.AddDevice(device_name);
 }
 
 int findDevice(const char* device) {
+    class EthernetKernel& kernel = EthernetKernel::GetInstance();
     std::string device_name = std::string(device);
-    return ethernet_kernel_.FindDevice(device_name);
+    return kernel.FindDevice(device_name);
 }
 
 int addAllDevices(const char* start_with_prefix) {
+    class EthernetKernel& kernel = EthernetKernel::GetInstance();
     std::string prefix = std::string(start_with_prefix);
-    return ethernet_kernel_.AddAllDevices(prefix);
+    return kernel.AddAllDevices(prefix);
+}
+
+int broadcastArp() {
+    class EthernetKernel& kernel = EthernetKernel::GetInstance();
+    return kernel.BroadcastArp();
+}
+
+int getDeviceNumber() {
+    class EthernetKernel& kernel = EthernetKernel::GetInstance();
+    return kernel.GetDeviceNumber();
 }
 
 class EthernetDevice* getDevicePointer(int id) {
-    return ethernet_kernel_.GetDevicePointer(id);
+    class EthernetKernel& kernel = EthernetKernel::GetInstance();
+    return kernel.GetDevicePointer(id);
 }
 
-void start() { ethernet_kernel_.Start(); }
+void start() {
+    class EthernetKernel& kernel = EthernetKernel::GetInstance();
+    kernel.Start();
+}
 }  // namespace ethernet
 }  // namespace minitcp

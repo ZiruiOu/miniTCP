@@ -6,6 +6,8 @@
 
 namespace minitcp {
 namespace ethernet {
+EthernetKernel* EthernetKernel::ethernet_singleton_ = nullptr;
+
 EthernetKernel::EthernetKernel() {
     epoll_fd_ = epoll_create1(0);
     MINITCP_ASSERT(epoll_fd_ != -1)
@@ -64,7 +66,8 @@ int EthernetKernel::AddAllDevices(const std::string& start_with_prefix) {
 
     for (netif = netif_devices; netif != NULL; netif = netif->next) {
         if (std::strncmp(netif->name, start_with_prefix.c_str(),
-                         start_with_prefix.size()) == 0) {
+                         start_with_prefix.size()) == 0 &&
+            (netif->flags & PCAP_IF_UP)) {
             // MINITCP_LOG(INFO)
             //     << "EthernetKernel: adding device " << netif->name <<
             //     std::endl;
@@ -100,6 +103,17 @@ int EthernetKernel::SendFrame(const void* buf, int len, int ethtype,
         << "EthernetKernel Error: device id invalid." << std::endl;
 
     return devices[id]->SendFrame((std::uint8_t*)(buf), len, ethtype, destmac);
+}
+
+int EthernetKernel::BroadcastArp() {
+    mac_t broadcast_mac = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
+    ip_t broadcast_ip = {0xffffffff};
+    int status = 0;
+    for (int i = 0; i < devices.size(); i++) {
+        status |=
+            devices[i]->SendArp(kArpTypeRequest, &broadcast_mac, &broadcast_ip);
+    }
+    return status;
 }
 
 int EthernetKernel::SetFrameReceiveCallback(frameReceiveCallback callback) {
