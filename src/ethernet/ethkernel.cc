@@ -86,6 +86,8 @@ int EthernetKernel::FindDevice(const std::string& device) {
             return i;
         }
     }
+    MINITCP_LOG(ERROR) << "EthernetKernel FindDevice: device " << device
+                       << " not found. " << std::endl;
     return -1;
 }
 

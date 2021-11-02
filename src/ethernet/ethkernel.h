@@ -16,7 +16,7 @@ namespace ethernet {
 class EthernetKernel {
    public:
     static EthernetKernel& GetInstance() {
-        std::once_flag ethernet_kernel_flag_;
+        static std::once_flag ethernet_kernel_flag_;
         std::call_once(ethernet_kernel_flag_,
                        [&]() { ethernet_singleton_ = new EthernetKernel; });
         return *ethernet_singleton_;
