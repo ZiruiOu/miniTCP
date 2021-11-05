@@ -23,13 +23,16 @@ void RoutingTable::InitRoutingTable() {
         int device_id = ethernet::findDevice(netif->name);
         if (device_id != -1) {
             auto device = ethernet::getDevicePointer(device_id);
+            MINITCP_LOG(INFO)
+                << "RoutingTable initRoutingTable : add device " << netif->name
+                << "into the routing table" << std::endl;
             routing_table_.push_back(RoutingEntry{
                 kPersist,
                 0,
                 0,
                 device->GetIpAddress(),
-                device->GetNetmask(),
-                device->GetIpAddress(),
+                ip_t{0xffffffff},  // exact match
+                ip_t{0},           // default gateway
                 0,
             });
         }
@@ -64,7 +67,7 @@ std::optional<ip_t> RoutingTable::Query(ip_t dest_ip) {
     ip_t prefix{0};
     for (auto& entry : routing_table_) {
         if (((dest_ip.s_addr & entry.netmask.s_addr) ==
-             (entry.netmask.s_addr & entry.netmask.s_addr)) &&
+             (entry.dest.s_addr & entry.netmask.s_addr)) &&
             ntohl(prefix.s_addr) < ntohl(entry.netmask.s_addr) &&
             entry.status != kGarbage) {
             found = 1;
@@ -137,6 +140,8 @@ int RoutingTable::Aging() {
             if (iter->gc_timer == 0) {
                 // timeout for garbage, directly remove from routing table.
                 iter = routing_table_.erase(iter);
+            } else {
+                iter++;
             }
         } else {
             iter++;

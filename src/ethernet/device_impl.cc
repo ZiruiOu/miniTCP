@@ -44,7 +44,7 @@ int EthernetDevice::SendFrame(const std::uint8_t* buffer, std::size_t length,
 
     {
         auto frame = std::shared_ptr<std::uint8_t>(
-            new std::uint8_t[14 + length](),
+            new std::uint8_t[18 + length](),
             [](std::uint8_t* ptr) { delete[] ptr; });
 
         auto type_field = htons(static_cast<std::uint16_t>(ethernet_type));
@@ -55,7 +55,7 @@ int EthernetDevice::SendFrame(const std::uint8_t* buffer, std::size_t length,
         std::memcpy(frame.get() + 12, &type_field, sizeof(type_field));
         std::memcpy(frame.get() + 14, buffer, length);
 
-        status = pcap_sendpacket(pcap_handler_, frame.get(), 14 + length);
+        status = pcap_sendpacket(pcap_handler_, frame.get(), 18 + length);
     }
 
     if (status == -1) {

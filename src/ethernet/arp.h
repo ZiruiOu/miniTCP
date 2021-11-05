@@ -1,6 +1,7 @@
 #ifndef MINITCP_SRC_NETWORK_ARP_H_
 #define MINITCP_SRC_NETWORK_ARP_H_
 
+#include "../common/timer.h"
 #include "arp_impl.h"
 #include "device.h"
 

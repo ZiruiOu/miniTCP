@@ -3,6 +3,7 @@
 #include <iostream>
 
 #include "../common/logging.h"
+#include "../common/timer.h"
 #include "../ethernet/arp.h"
 #include "../ethernet/device.h"
 
@@ -11,9 +12,14 @@ namespace network {
 
 static std::size_t routing_table_counter_ = 0;
 
-void init() {
+void initRoutingTable() {
     class RoutingTable &routing_table = RoutingTable::GetInstance();
     routing_table.InitRoutingTable();
+}
+
+std::optional<ip_t> queryRoutingTable(ip_t dest_ip) {
+    class RoutingTable &routing_table = RoutingTable::GetInstance();
+    routing_table.Query(dest_ip);
 }
 
 int broadcastDVTable() {
@@ -52,21 +58,17 @@ void receiveDVTableCallback(const void *buffer) {
 }
 
 void timerRIPHandler() {
-    broadcastDVTable();
-    class RoutingTable &routing_table = RoutingTable::GetInstance();
-    int modified = routing_table.Aging();
-    // if (modified) {
-    //     broadcastDVTable();
-    //     MINITCP_LOG(INFO) << "routing table aging: items " << std::endl
-    //                       << routing_table << std::endl;
-    // }
-    routing_table.GarbageCollection();
-    if (routing_table_counter_ == 10) {
-        MINITCP_LOG(INFO) << " current routing table " << std::endl
-                          << routing_table << std::endl;
-        routing_table_counter_ = 0;
-    }
-    routing_table_counter_++;
+    handler_t rip_timer_handler = new TimerHandler(/*is_persistent = */ true);
+    std::function<void()> rip_handler_wrapper = [rip_timer_handler]() {
+        network::broadcastDVTable();
+        network::RoutingTable &routing_table =
+            network::RoutingTable::GetInstance();
+        routing_table.Aging();
+        setTimerAfter(/* milliseconds = */ 3000,
+                      /* handler = */ rip_timer_handler);
+    };
+    rip_timer_handler->RegisterCallback(rip_handler_wrapper);
+    setTimerAfter(/* milliseconds = */ 1000, /* handler = */ rip_timer_handler);
 }
 
 }  // namespace network

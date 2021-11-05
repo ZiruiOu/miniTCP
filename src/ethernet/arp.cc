@@ -1,5 +1,7 @@
 #include "arp.h"
 
+#include "../common/timer.h"
+#include "../common/timer_impl.h"
 #include "arp_impl.h"
 
 namespace minitcp {
@@ -36,15 +38,17 @@ int receiveArpCallback(const void *packet, int length, int device_id) {
 }
 
 void timerArpHandler() {
-    if (local_arp_timer_counter_ % 2 == 0) {
-        broadcastArp();
-    }
-    class ArpTable &local_arp = ArpTable::GetInstance();
-    local_arp.Aging();
-    local_arp_timer_counter_++;
-    if (local_arp_timer_counter_ >= 4) {
-        local_arp_timer_counter_ = 0;
-    }
+    handler_t arp_timer_handler = new TimerHandler(/* is_persist = */ true);
+    std::function<void()> arp_handler_wrapper = [arp_timer_handler]() {
+        ethernet::broadcastArp();
+        ethernet::ArpTable &arp_table = ethernet::ArpTable::GetInstance();
+        arp_table.Aging();
+        setTimerAfter(/* milliseconds = */ 8000,
+                      /* handler = */ arp_timer_handler);
+    };
+    arp_timer_handler->RegisterCallback(arp_handler_wrapper);
+    setTimerAfter(/* milliseconds = */ 1000,
+                  /* handler = */ arp_timer_handler);
 }
 
 }  // namespace ethernet

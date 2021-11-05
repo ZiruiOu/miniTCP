@@ -4,6 +4,7 @@ add_library(network
     STATIC
         routing_impl.cc
         routing.cc
+        ip.cc
 )
 
 target_include_directories(network

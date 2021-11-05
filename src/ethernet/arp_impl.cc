@@ -15,8 +15,8 @@ void ArpTable::Update(ip_t *dest_ip, mac_t *dest_mac, int local_id) {
     std::scoped_lock lock(arp_mutex_);
     for (auto &entry : arp_table_) {
         if (entry.dest_ip.s_addr == (*dest_ip).s_addr) {
-            MINITCP_LOG(INFO)
-                << "UpdateArpTable: an entry updated." << std::endl;
+            // MINITCP_LOG(INFO)
+            //     << "UpdateArpTable: an entry updated." << std::endl;
             if (entry.aging != -1) {
                 entry.aging = kMaxArpAging;
             }
@@ -49,7 +49,7 @@ std::optional<ArpTableEntry> ArpTable::Query(ip_t dest_ip) {
             return entry;
         }
     }
-    MINITCP_LOG(ERROR) << "QueryArpTable: arp entry not found." << std::endl;
+    // MINITCP_LOG(ERROR) << "QueryArpTable: arp entry not found." << std::endl;
     return {};
 }
 
@@ -60,7 +60,8 @@ std::optional<ArpTableEntry> ArpTable::QueryByDeviceId(int id) {
             return entry;
         }
     }
-    MINITCP_LOG(ERROR) << "QueryByDeviceId: arp entry not found." << std::endl;
+    // MINITCP_LOG(ERROR) << "QueryByDeviceId: arp entry not found." <<
+    // std::endl;
     return {};
 }
 
@@ -111,10 +112,10 @@ int ArpTable::Aging() {
             iter++;
         } else if ((*iter).aging == 0) {
             modified = 1;
-            MINITCP_LOG(INFO)
-                << "AgingArpTable: arp entry with ip address "
-                << inet_ntoa((*iter).dest_ip)
-                << " is removing from the arp table." << std::endl;
+            // MINITCP_LOG(INFO)
+            //     << "AgingArpTable: arp entry with ip address "
+            //     << inet_ntoa((*iter).dest_ip)
+            //     << " is removing from the arp table." << std::endl;
             iter = arp_table_.erase(iter);
         } else {
             iter++;

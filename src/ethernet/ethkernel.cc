@@ -15,13 +15,13 @@ EthernetKernel::EthernetKernel() {
         << std::endl;
 
     // register stdin
-    struct epoll_event event;
-    event.events = EPOLLIN | EPOLLET;
-    event.data.fd = kEpollStdinFd;
-    int status = epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, 0, &event);
-    MINITCP_ASSERT(status != -1)
-        << "Ethernet kernel: "
-        << " cannot register stdin into epoll instance. " << std::endl;
+    // struct epoll_event event;
+    // event.events = EPOLLIN | EPOLLET;
+    // event.data.fd = kEpollStdinFd;
+    // int status = epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, 0, &event);
+    // MINITCP_ASSERT(status != -1)
+    //    << "Ethernet kernel: "
+    //    << " cannot register stdin into epoll instance. " << std::endl;
 }
 
 EthernetKernel::~EthernetKernel() {
@@ -171,18 +171,29 @@ void EthernetKernel::Start() {
                 int device_id = events[i].data.fd;
 
                 if (device_id == kEpollStdinFd) {
-                    std::string device_name, address;
-                    std::cin >> device_name >> address;
-                    char content[1000];
-                    scanf("%[^\n\n\r]", content);
-                    content[999] = 0;
+                    // std::string device_name, address;
+                    // std::cin >> device_name >> address;
+                    // char content[1000];
+                    // scanf("%[^\n\n\r]", content);
+                    // content[999] = 0;
 
-                    mac_t dest_address;
-                    ether_aton_r(address.c_str(), &dest_address);
+                    // mac_t dest_address;
+                    // ether_aton_r(address.c_str(), &dest_address);
 
-                    device_id = FindDevice(device_name);
-                    this->SendFrame(content, std::strlen(content), 0x1551,
-                                    &dest_address, device_id);
+                    // device_id = FindDevice(device_name);
+                    // this->SendFrame(content, std::strlen(content), 0x1551,
+                    //                 &dest_address, device_id);
+
+                    // char src[30] = {};
+                    // char dest[30] = {};
+                    // char my_message[100] = {};
+                    // scanf("%s %s %s", src, dest, my_message);
+
+                    // ip_t src_ip, dest_ip;
+                    // inet_aton(src, &src_ip);
+                    // inet_aton(dest, &dest_ip);
+                    // network::sendIPPacket(src_ip, dest_ip, 233, my_message,
+                    //                       std::strlen(my_message));
 
                 } else {
                     auto device_ptr = this->devices[device_id];

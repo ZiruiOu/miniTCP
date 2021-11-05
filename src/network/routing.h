@@ -10,7 +10,9 @@ namespace network {
 extern "C" {
 #endif  // ! __cplusplus
 
-void init();
+void initRoutingTable();
+
+std::optional<ip_t> queryRoutingTable(ip_t dest_ip);
 
 int broadcastDVTable();
 

@@ -56,7 +56,6 @@ class RoutingTable {
      * @param dest The local ip of the device.
      * @param netmask The netmask of the local device.
      * @param peer_ip The peer ip corresponding to the local device.
-     * @return
      */
     void Insert(ip_t dest, ip_t netmask, ip_t nexthop_ip, int distance);
     void Remove(ip_t dest, ip_t netmask);

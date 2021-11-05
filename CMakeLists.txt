@@ -75,3 +75,11 @@ target_link_libraries(route
         network
         ${PCAP_LIBRARY}
 )
+add_executable(ip src/application/network/ip.cc)
+target_link_libraries(ip
+    PRIVATE
+        utilities
+        ethernet
+        network
+        ${PCAP_LIBRARY}
+)
