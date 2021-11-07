@@ -87,24 +87,25 @@ int main(int argc, char *argv[]) {
     network::timerRIPHandler();
 
     timerStart();
-    // std::this_thread::sleep_for(std::chrono::milliseconds(1000));
     int operation = 0;
     char src[30] = {};
     char dest[30] = {};
-    char message[100] = {};
 
-    while (scanf("%d %s %s %s", &operation, src, dest, message) == 4) {
+    while (scanf("%d", &operation) == 1) {
         if (operation == 0) {
+            char message[200] = {};
+            scanf("%s %s %s", src, dest, message);
             ip_t src_ip, dest_ip;
             inet_aton(src, &src_ip);
             inet_aton(dest, &dest_ip);
-
-            network::sendIPPacket(src_ip, dest_ip, 233, message,
+            network::sendIPPacket(src_ip, dest_ip, 253, message,
                                   std::strlen(message));
         } else if (operation == 1) {
             network::RoutingTable &table = network::RoutingTable::GetInstance();
             MINITCP_LOG(INFO) << " current routing table " << std::endl
                               << table << std::endl;
+        } else if (operation == 2) {
+            MINITCP_LOG(INFO) << " current arp table " << std::endl;
         }
     }
     return 0;

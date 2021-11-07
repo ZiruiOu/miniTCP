@@ -4,6 +4,9 @@ build/*
 # vscode settings
 .vscode/*
 
+# python script cache
+*/__pycache__
+
 # Prerequisites
 *.d
 

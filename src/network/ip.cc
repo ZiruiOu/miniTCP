@@ -11,9 +11,27 @@ namespace minitcp {
 namespace network {
 // struct ip in <netinet/ip.h>
 
-int calculateCheckSum(const void* header, int len) {
-    // TODO : calculate checksum.
-    return 0;
+std::uint16_t calculateCheckSum(const void* header) {
+    auto ip_header = reinterpret_cast<const struct ip*>(header);
+    int length = ip_header->ip_hl;
+    if (length < 5) {
+        MINITCP_LOG(ERROR) << "calculate IP Ckecksum: receive a bad ip packet "
+                              "with length less than 20 bytes."
+                           << std::endl;
+        return -1;
+    }
+    const std::uint16_t* as_uint16_buffer =
+        static_cast<const std::uint16_t*>(header);
+    std::uint32_t sum = 0;
+    for (int i = 0; i < length * 2; i++) {
+        sum += as_uint16_buffer[i];
+    }
+    // set the old checksum as 0
+    sum -= as_uint16_buffer[5];
+    while ((sum >> 16)) {
+        sum = (sum >> 16) + (sum & 0xffff);
+    }
+    return ~static_cast<std::uint16_t>(sum);
 }
 
 int sendIPPacketInternal(const ip_t src, const ip_t dest, const void* ip_packet,
@@ -74,22 +92,23 @@ int sendIPPacket(const struct in_addr src, const struct in_addr dest, int proto,
     auto ip_packet = new std::uint8_t[ip_length]();
     auto ip_header = reinterpret_cast<struct ip*>(ip_packet);
 
-    // default values
-    ip_header->ip_v = (unsigned char)0x0100;
-    ip_header->ip_hl = (unsigned char)0x0101;
-    // TODO : add right default values
+    // default value
+    ip_header->ip_v = 0x04;
+    ip_header->ip_hl = 0x05;
     ip_header->ip_tos = 0;
     // TODO :
-    ip_header->ip_len = htons(0x0);
+    ip_header->ip_len = htons(20 + len);
     ip_header->ip_id = htons(0x0);
-    ip_header->ip_off = 0;
+    ip_header->ip_off = 1 << 6;  // don't fragment
     // TODO : add into constant.h
     ip_header->ip_ttl = 255;
     ip_header->ip_p = static_cast<std::uint8_t>(proto);
-    // TODO : add right checksum
-    ip_header->ip_sum = htons(0x0);
+    ip_header->ip_sum = 0x0;
     ip_header->ip_src = src;
     ip_header->ip_dst = dest;
+
+    ip_header->ip_sum = calculateCheckSum(ip_header);
+
     std::memcpy(ip_packet + sizeof(struct ip), buf, len);
 
     int status = sendIPPacketInternal(src, dest, ip_packet, ip_length);
@@ -106,15 +125,23 @@ int forwardIPPacket(const struct in_addr src, const struct in_addr dest,
 
     auto ip_header = reinterpret_cast<struct ip*>(buffer);
     // TODO : recalculate the checksum
-    int ip_checksum = calculateCheckSum(ip_header, sizeof(struct ip));
+    std::uint16_t ip_checksum = calculateCheckSum(ip_header);
     // TODO : verify the checksum
+
+    if (ip_checksum != ip_header->ip_sum) {
+        MINITCP_LOG(ERROR) << "forwardIPPacket: drop error packet."
+                           << std::endl;
+        // TODO : send icmp message.
+        delete[] buffer;
+        return 1;
+    }
 
     ip_header->ip_ttl--;
     if (ip_header->ip_ttl == 0) {
         status = 1;
         // TODO : send back an ICMP message.
     } else {
-        int new_checksum = calculateCheckSum(ip_header, sizeof(struct ip));
+        std::uint16_t new_checksum = calculateCheckSum(ip_header);
         ip_header->ip_sum = new_checksum;
         status = sendIPPacketInternal(src, dest, buffer, len);
     }

@@ -1,12 +1,12 @@
 import argparse
 import os
 import sys
-from utils import install_ns, lauch_terminals, delete_ns, bypass_kernel_ip, cancell_bypass_ip
+from utils import install_ns, lauch_terminals, delete_ns
 
-CHECKPOINT5_INSTALL_PATH: str = "script/install_topo1.sh"
+CHECKPOINT5_INSTALL_PATH: str = "script/install_topo2.sh"
 CHECKPOINT5_SCRIPT_PATH: str = "script/enter_ns.sh"
 CHECKPOINT5_DELETE_PATH: str = "script/exit_ns.sh"
-NUM_NETWORK: int = 4
+NUM_NETWORK: int = 6
 
 parser = argparse.ArgumentParser()
 parser.add_argument("-i", "--install", help="install checkpoint topology")
