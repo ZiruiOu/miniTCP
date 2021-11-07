@@ -3,9 +3,7 @@ A mini network protocol stack built upon libpcap.
 
 
 
-### Usage
-
-#### Part A
+## Part A
 
 To install the demo program, please first enter the miniTCP directory and run the following command.
 
@@ -24,15 +22,13 @@ The network topology we use in checkpoint 1 and checkpoint 2 is exactly **the sa
 
 
 
-##### Checkpoint 1:  Show that your implementation can detect network interfaces on the host.
+#### Checkpoint 1:  Show that your implementation can detect network interfaces on the host.
 
 To run the demo, first use the following command to activate the NS environment.
 
 ```shell
 bash script/install_ckpt1.sh
 ```
-
-
 
 Run following command to enter ns#3.
 
@@ -48,8 +44,6 @@ To go back to the **build directory in miniTCP** after executing the bash script
 cd ../../../build
 ```
 
-
-
 To see the demo, please enter the build director in the root of miniTCP and run the following command.
 
 ```shell
@@ -64,7 +58,7 @@ You can see the result of devices like this, which implies that the ethernet ker
 
 
 
-##### Checkpoint 2:  Show that your implementation can capture frames from a device and inject frames to a device using libpcap.
+#### Checkpoint 2:  Show that your implementation can capture frames from a device and inject frames to a device using libpcap.
 
 To run the demo, use the following command to activate the NS environment.
 
@@ -115,3 +109,11 @@ And the device veth 2-1 will receive this message and use a callback function to
 The result of the checkpoint 2.
 
 ![checkpoint2](./demo/checkpoint2.jpg)
+
+
+
+
+
+## Part B
+
+### 
