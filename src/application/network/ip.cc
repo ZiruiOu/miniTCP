@@ -75,6 +75,15 @@ int NetworkCallback(const void *buffer, int length) {
     return status;
 }
 
+void userPrompt() {
+    printf(
+        "Usage : \n \
+            To send message from s_ip to d_ip: send s_ip d_ip no-blank-space-message\n \
+            To see the routing table: routing\n \
+            To see the arp table: arp\n \
+            To set the routing table: add s_ip netmask_ip nexthop_ip\n");
+}
+
 int main(int argc, char *argv[]) {
     ethernet::addAllDevices("veth");
     network::initRoutingTable();
@@ -87,12 +96,13 @@ int main(int argc, char *argv[]) {
     network::timerRIPHandler();
 
     timerStart();
-    int operation = 0;
+    char operation[30] = {};
     char src[30] = {};
     char dest[30] = {};
 
-    while (scanf("%d", &operation) == 1) {
-        if (operation == 0) {
+    userPrompt();
+    while (scanf("%s", operation) == 1) {
+        if (std::strcmp(operation, "send") == 0) {
             char message[200] = {};
             scanf("%s %s %s", src, dest, message);
             ip_t src_ip, dest_ip;
@@ -100,14 +110,14 @@ int main(int argc, char *argv[]) {
             inet_aton(dest, &dest_ip);
             network::sendIPPacket(src_ip, dest_ip, 253, message,
                                   std::strlen(message));
-        } else if (operation == 1) {
+        } else if (std::strcmp(operation, "routing") == 0) {
             network::RoutingTable &table = network::RoutingTable::GetInstance();
             MINITCP_LOG(INFO) << " current routing table " << std::endl
                               << table << std::endl;
-        } else if (operation == 2) {
+        } else if (std::strcmp(operation, "arp") == 0) {
             // TODO : pretty print ARP table
             MINITCP_LOG(INFO) << " current arp table " << std::endl;
-        } else if (operation == 3) {
+        } else if (std::strcmp(operation, "add") == 0) {
             MINITCP_LOG(INFO) << "adding a new item into routing table";
 
             char netmask[30] = {};
@@ -124,6 +134,8 @@ int main(int argc, char *argv[]) {
             network::RoutingTable &table = network::RoutingTable::GetInstance();
             table.Insert(dest_ip, netmask_ip, nexthop_ip, 0, network::kPersist);
         }
+        userPrompt();
+        std::memset(operation, 0, sizeof(operation));
     }
     return 0;
 }
