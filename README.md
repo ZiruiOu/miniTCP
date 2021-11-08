@@ -229,7 +229,7 @@ Send a message from ns2 to ns1 by entering the following command in the terminal
 
 
 ```
-0 10.102.1.2 10.102.1.1 Hello!ThisIsNS2Speaking!WishYouHaveANiceDay.
+send 10.102.1.2 10.102.1.1 Hello!ThisIsNS2Speaking!WishYouHaveANiceDay.
 ```
 
 
