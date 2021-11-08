@@ -42,9 +42,9 @@ void RoutingTable::InitRoutingTable() {
 }
 
 void RoutingTable::Insert(ip_t dest, ip_t netmask, ip_t nexthop_ip,
-                          int distance) {
+                          int distance, enum RoutingEntryStatus status) {
     std::scoped_lock lock(routing_mutex_);
-    this->unsafeInsert(dest, netmask, nexthop_ip, distance);
+    this->unsafeInsert(dest, netmask, nexthop_ip, distance, status);
 }
 
 void RoutingTable::Remove(ip_t dest, ip_t netmask) {
@@ -89,9 +89,9 @@ int RoutingTable::UpdateByDistanceVector(ip_t nexthop_ip, const void* buffer,
     std::scoped_lock lock(routing_mutex_);
     int modified = 0;
     for (int i = 0; i < length; i++) {
-        modified |= this->unsafeInsert(distance_vector[i].dest,
-                                       distance_vector[i].netmask, nexthop_ip,
-                                       ntohl(distance_vector[i].distance) + 1);
+        modified |= this->unsafeInsert(
+            distance_vector[i].dest, distance_vector[i].netmask, nexthop_ip,
+            ntohl(distance_vector[i].distance) + 1, kStable);
     }
     return modified;
 }
@@ -173,11 +173,11 @@ std::ostream& operator<<(std::ostream& os, RoutingTable& table) {
 }
 
 int RoutingTable::unsafeInsert(ip_t dest, ip_t netmask, ip_t nexthop_ip,
-                               int distance) {
+                               int distance, enum RoutingEntryStatus status) {
     int modified = 0;
     for (auto& entry : routing_table_) {
         if (entry.dest.s_addr == dest.s_addr &&
-            entry.netmask.s_addr == entry.netmask.s_addr) {
+            entry.netmask.s_addr == netmask.s_addr) {
             if (entry.nexthop_ip.s_addr == nexthop_ip.s_addr) {
                 if (distance > kRipPoisonThresh) {
                     entry.distance = kRipPoisonThresh + 1;
@@ -203,8 +203,25 @@ int RoutingTable::unsafeInsert(ip_t dest, ip_t netmask, ip_t nexthop_ip,
         }
     }
     if (distance < kRipPoisonThresh) {
-        routing_table_.push_back(RoutingEntry{kStable, kRipMaxAging, 0, dest,
-                                              netmask, nexthop_ip, distance});
+        switch (status) {
+            case kStable:
+                routing_table_.push_back(RoutingEntry{kStable, kRipMaxAging, 0,
+                                                      dest, netmask, nexthop_ip,
+                                                      distance});
+                break;
+            case kPersist:
+                routing_table_.push_back(RoutingEntry{
+                    kPersist, 0, 0, dest, netmask, nexthop_ip, distance});
+                MINITCP_LOG(INFO) << "unsafeInsert: successfully add an "
+                                     "permanent item into the routing table."
+                                  << std::endl;
+                break;
+            default:
+                MINITCP_LOG(ERROR)
+                    << "unsafeInsert: no such routing entry status. "
+                    << std::endl;
+                break;
+        }
     }
     return modified;
 }

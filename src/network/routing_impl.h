@@ -57,7 +57,8 @@ class RoutingTable {
      * @param netmask The netmask of the local device.
      * @param peer_ip The peer ip corresponding to the local device.
      */
-    void Insert(ip_t dest, ip_t netmask, ip_t nexthop_ip, int distance);
+    void Insert(ip_t dest, ip_t netmask, ip_t nexthop_ip, int distance,
+                enum RoutingEntryStatus status);
     void Remove(ip_t dest, ip_t netmask);
     std::optional<ip_t> Query(ip_t dest_ip);
     /**
@@ -79,7 +80,8 @@ class RoutingTable {
     RoutingTable() = default;
     ~RoutingTable() = default;
     // some unsafe function without lock, serve as internal helpers.
-    int unsafeInsert(ip_t dest, ip_t netmask, ip_t nexthop_ip, int distance);
+    int unsafeInsert(ip_t dest, ip_t netmask, ip_t nexthop_ip, int distance,
+                     enum RoutingEntryStatus status);
     void unsafeRemove(ip_t dest, ip_t netmask);
     void unsafeGarbageCollection();
 

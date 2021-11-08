@@ -105,7 +105,24 @@ int main(int argc, char *argv[]) {
             MINITCP_LOG(INFO) << " current routing table " << std::endl
                               << table << std::endl;
         } else if (operation == 2) {
+            // TODO : pretty print ARP table
             MINITCP_LOG(INFO) << " current arp table " << std::endl;
+        } else if (operation == 3) {
+            MINITCP_LOG(INFO) << "adding a new item into routing table";
+
+            char netmask[30] = {};
+            ip_t dest_ip, netmask_ip, nexthop_ip;
+
+            scanf("%s %s %s", dest, netmask, src);
+            inet_aton(dest, &dest_ip);
+            inet_aton(netmask, &netmask_ip);
+            inet_aton(src, &nexthop_ip);
+
+            MINITCP_LOG(INFO)
+                << "netmask = " << inet_ntoa(netmask_ip) << std::endl;
+
+            network::RoutingTable &table = network::RoutingTable::GetInstance();
+            table.Insert(dest_ip, netmask_ip, nexthop_ip, 0, network::kPersist);
         }
     }
     return 0;
