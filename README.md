@@ -127,7 +127,7 @@ The result of the checkpoint 2.
 
 ### Writing task2: Describe your routing algorithm.
 
-​	I implement RIP protocol above the link layer.
+​	I implement RIP protocol above the link layer, which is a well-known distance vector algorithm.
 
    To be more specific, every host would maintain a local routing table, recording the destination, netmask of the destination, the corresponding nexthop ip and the metric (also known as the distance). We use the **hop number** from this host to the destination as the metric.
 
@@ -142,3 +142,83 @@ The result of the checkpoint 2.
   To accelerate the covergence of the algorithm, the **poison reversing** technique is also applied to the construction of the distance vector. Upon constructing the distance vector for a specific neighbor, we will mark the distance of the entries that learnt from this neighbor as inreachable.
 
   Since I haven't finish the transport layer yet, the only layer I can relay on to send the distance vector would be the **link layer**, which means the current algorithm is **sending/receiving raw ethernet frame**, which seems to be quiet strange. I will use a formal RIP protocol packet to construct my RIP protocol when UDP is built. 
+
+
+
+### Checkpoint3
+
+TODO : add checkpoint3 demo.
+
+
+
+### Checkpoint4
+
+To check out checkpoint4, please enter the miniTCP directory in the terminal and execute the following command
+
+```shell
+python3 script/check4.py -install
+```
+
+You may need to enter the password for several terminals to to get the sudo privilege.
+
+
+
+The topology we use in this checkpoint is the same as the example given in the vnetUils.
+
+After executing the command, you may need to wait for several seconds to wait for the convergence of the routing algorithm.
+
+(1) To show that NS1 finds NS4, enter 1 to let the terminal of NS1 to print out the routing table. We can find that the address 10.100.3.2 is in the routing table of NS1, which belongs to NS4.
+
+
+
+TODO: picture.
+
+
+
+(2) To show that NS1 cannot find NS4 after disconnecting NS2, directly terminate the corresponding terminal of NS2. After several seconds, enter 2 to show the routing table of NS1 again, we can find out that the IP address corresponding to NS2, NS3 and NS4 disappear.
+
+
+
+TODO: picture.
+
+
+
+(3) To show that NS1 can find NS4 again if NS2 reconnects to the network, please execute the following command in the directory of miniTCP in a new terminal.
+
+```shell
+bash script/enter_ns.sh 2
+```
+
+After several minutes, enter 2 in the terminal of NS1 to show the routing table, we can find out that the routing table of NS1 contains the IP addresses corresponding to NS2, NS3 and NS4 again.
+
+
+
+TODO : picture.
+
+
+
+### Checkpoint5
+
+To check out checkpoint5, please execute the following command in the directory of miniTCP in the terminal.
+
+```shell
+python3 script/check5.py -install
+```
+
+TODO : the ip configuration of each NSs.
+
+TODO : the distance of each IP pairs.
+
+
+
+### Checkpoint6
+
+To check out checkpoint5, please execute the following command in the directory of miniTCP in the terminal.
+
+```shell
+python3 script/check6.py -install
+```
+
+TODO : the ip configuration and the topology.
+
+We manully add a new routing entry into the routing table of NS1.
