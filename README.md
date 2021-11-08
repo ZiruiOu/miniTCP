@@ -167,7 +167,7 @@ TODO : write description of the checkpoint.
 
 The topology we use in this checkpoint is exactly the same as the example given in the vnetUils.
 
-
+![topology](./demo/topology.png)
 
 The IP address configuration is shown in the following table.
 
@@ -208,9 +208,7 @@ After executing the command, you may need to wait for several seconds to wait fo
 
 (1) To show that NS1 finds NS4, enter 1 to let the terminal of NS1 to print out the routing table. We can find that the address 10.100.3.2 is in the routing table of NS1, which belongs to NS4.
 
-
-
-TODO: picture.
+![checkpoint4-1-ns1](./demo/checkpoint4-1-ns1.png)
 
 
 
@@ -218,7 +216,9 @@ TODO: picture.
 
 
 
-TODO: picture.
+The routing table of NS1 after removing NS2. The ip addresses belongs to NS2, NS3, NS4 are all marked as inreachable (distance equals 17) and being deleted in the next round.
+
+![checkpoint4-2-ns1](./demo/checkpoint4-2-ns1.png)
 
 
 
@@ -230,11 +230,13 @@ bash script/enter_ns.sh 2
 
 
 
-After several minutes, enter 2 in the terminal of NS1 to show the routing table, we can find out that the routing table of NS1 contains the IP addresses corresponding to NS2, NS3 and NS4 again.
+After several seconds, enter 2 in the terminal of NS1 to show the routing table, we can find out that the routing table of NS1 contains the IP addresses corresponding to NS2, NS3 and NS4 again.
 
 
 
-TODO : picture.
+![checkpoint4-3-ns1](./demo/checkpoint4-3-ns1.png)
+
+
 
 
 
@@ -339,4 +341,3 @@ python3 script/check6.py -delete
 We manully add a new routing entry into the routing table of NS1.
 
 If the router fail to apply the longest prefix matching rule, then NS2 would not receive the message from NS1.
-
