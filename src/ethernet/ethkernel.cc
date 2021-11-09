@@ -6,6 +6,8 @@
 
 namespace minitcp {
 namespace ethernet {
+EthernetKernel* EthernetKernel::ethernet_singleton_ = nullptr;
+
 EthernetKernel::EthernetKernel() {
     epoll_fd_ = epoll_create1(0);
     MINITCP_ASSERT(epoll_fd_ != -1)
@@ -13,13 +15,13 @@ EthernetKernel::EthernetKernel() {
         << std::endl;
 
     // register stdin
-    struct epoll_event event;
-    event.events = EPOLLIN | EPOLLET;
-    event.data.fd = kEpollStdinFd;
-    int status = epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, 0, &event);
-    MINITCP_ASSERT(status != -1)
-        << "Ethernet kernel: "
-        << " cannot register stdin into epoll instance. " << std::endl;
+    // struct epoll_event event;
+    // event.events = EPOLLIN | EPOLLET;
+    // event.data.fd = kEpollStdinFd;
+    // int status = epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, 0, &event);
+    // MINITCP_ASSERT(status != -1)
+    //    << "Ethernet kernel: "
+    //    << " cannot register stdin into epoll instance. " << std::endl;
 }
 
 EthernetKernel::~EthernetKernel() {
@@ -64,7 +66,8 @@ int EthernetKernel::AddAllDevices(const std::string& start_with_prefix) {
 
     for (netif = netif_devices; netif != NULL; netif = netif->next) {
         if (std::strncmp(netif->name, start_with_prefix.c_str(),
-                         start_with_prefix.size()) == 0) {
+                         start_with_prefix.size()) == 0 &&
+            (netif->flags & PCAP_IF_UP)) {
             // MINITCP_LOG(INFO)
             //     << "EthernetKernel: adding device " << netif->name <<
             //     std::endl;
@@ -83,6 +86,8 @@ int EthernetKernel::FindDevice(const std::string& device) {
             return i;
         }
     }
+    MINITCP_LOG(ERROR) << "EthernetKernel FindDevice: device " << device
+                       << " not found. " << std::endl;
     return -1;
 }
 
@@ -100,6 +105,17 @@ int EthernetKernel::SendFrame(const void* buf, int len, int ethtype,
         << "EthernetKernel Error: device id invalid." << std::endl;
 
     return devices[id]->SendFrame((std::uint8_t*)(buf), len, ethtype, destmac);
+}
+
+int EthernetKernel::BroadcastArp() {
+    mac_t broadcast_mac = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
+    ip_t broadcast_ip = {0xffffffff};
+    int status = 0;
+    for (int i = 0; i < devices.size(); i++) {
+        status |=
+            devices[i]->SendArp(kArpTypeRequest, &broadcast_mac, &broadcast_ip);
+    }
+    return status;
 }
 
 int EthernetKernel::SetFrameReceiveCallback(frameReceiveCallback callback) {
@@ -141,48 +157,60 @@ void EthernetKernel::Start() {
     //    worker.detach();
     //}
 
-    // std::thread epoll_worker = std::thread([this]() {
-    int result;
-    struct pcap_pkthdr packet_header;
-    const u_char* packet_data;
-    struct epoll_event events[kMaxConcurrentEvents];
+    std::thread epoll_worker = std::thread([this]() {
+        int result;
+        struct pcap_pkthdr packet_header;
+        const u_char* packet_data;
+        struct epoll_event events[kMaxConcurrentEvents];
 
-    while (true) {
-        int num_ready = epoll_wait(epoll_fd_, events, kMaxConcurrentEvents, -1);
+        while (true) {
+            int num_ready =
+                epoll_wait(epoll_fd_, events, kMaxConcurrentEvents, -1);
 
-        for (int i = 0; i < num_ready; i++) {
-            int device_id = events[i].data.fd;
+            for (int i = 0; i < num_ready; i++) {
+                int device_id = events[i].data.fd;
 
-            if (device_id == kEpollStdinFd) {
-                std::string device_name, address;
-                std::cin >> device_name >> address;
-                char content[1000];
-                scanf("%[^\n\n\r]", content);
-                content[999] = 0;
+                if (device_id == kEpollStdinFd) {
+                    // std::string device_name, address;
+                    // std::cin >> device_name >> address;
+                    // char content[1000];
+                    // scanf("%[^\n\n\r]", content);
+                    // content[999] = 0;
 
-                mac_t dest_address;
-                ether_aton_r(address.c_str(), &dest_address);
+                    // mac_t dest_address;
+                    // ether_aton_r(address.c_str(), &dest_address);
 
-                device_id = FindDevice(device_name);
-                this->SendFrame(content, std::strlen(content), 0x1551,
-                                &dest_address, device_id);
+                    // device_id = FindDevice(device_name);
+                    // this->SendFrame(content, std::strlen(content), 0x1551,
+                    //                 &dest_address, device_id);
 
-            } else {
-                auto device_ptr = this->devices[device_id];
-                pcap_t* device_handler = device_ptr->pcap_handler_;
+                    // char src[30] = {};
+                    // char dest[30] = {};
+                    // char my_message[100] = {};
+                    // scanf("%s %s %s", src, dest, my_message);
 
-                packet_data = pcap_next(device_handler, &packet_header);
-                if (packet_data != NULL) {
-                    if (this->kernel_callback_) {
-                        this->kernel_callback_(packet_data,
-                                               packet_header.caplen, device_id);
+                    // ip_t src_ip, dest_ip;
+                    // inet_aton(src, &src_ip);
+                    // inet_aton(dest, &dest_ip);
+                    // network::sendIPPacket(src_ip, dest_ip, 233, my_message,
+                    //                       std::strlen(my_message));
+
+                } else {
+                    auto device_ptr = this->devices[device_id];
+                    pcap_t* device_handler = device_ptr->pcap_handler_;
+
+                    packet_data = pcap_next(device_handler, &packet_header);
+                    if (packet_data != NULL) {
+                        if (this->kernel_callback_) {
+                            this->kernel_callback_(
+                                packet_data, packet_header.caplen, device_id);
+                        }
                     }
                 }
             }
         }
-    }
-    //});
-    // epoll_worker.detach();
+    });
+    epoll_worker.detach();
 }
 
 }  // namespace ethernet

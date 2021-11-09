@@ -7,7 +7,7 @@ namespace minitcp {
 
 // pcap parameters
 // snap len
-const int kPcapSnapLen = 65536;
+const int kPcapSnapLen = 3000;
 // timeout
 const int kPcapTimeout = -1;
 
@@ -32,6 +32,18 @@ const int kMaxEpollEvent = 40;
 
 // for ethernet transmission
 const int kFramePayloadSize = 1500;
+
+// for arp aging
+const int kMaxArpAging = 200;
+// for arp type
+const std::uint16_t kArpTypeRequest = 1;
+const std::uint16_t kArpTypeReply = 2;
+
+// for my rip protocol
+const int kRipMaxAging = 6;
+const int kRipMaxGarbage = 4;
+// poison reversing threshold
+const int kRipPoisonThresh = 16;
 
 // for ip transmission
 

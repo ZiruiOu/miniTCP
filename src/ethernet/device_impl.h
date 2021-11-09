@@ -14,6 +14,7 @@
 #include "../common/constant.h"
 #include "../common/logging.h"
 #include "../common/types.h"
+#include "arp_impl.h"
 #include "ethkernel.h"
 #include "packetio.h"
 
@@ -47,7 +48,13 @@ class EthernetDevice : public DeviceBase {
                   int ethernet_type, const void* dest_mac) override;
     void ReceivePoll() override;
 
+    int SendArp(std::uint16_t arp_type, const void* dest_mac,
+                const void* dest_ip);
+
     const std::string& GetName() const override { return device_name_; }
+    mac_t GetMacAddress() const { return mac_addr_; }
+    ip_t GetIpAddress() const { return ip_addr_; }
+    ip_t GetNetmask() const { return netmask_; }
 
     friend class EthernetKernel;
 
@@ -59,6 +66,7 @@ class EthernetDevice : public DeviceBase {
    private:
     mac_t mac_addr_;
     ip_t ip_addr_;
+    ip_t netmask_;
     std::string device_name_;
     // frameReceiveCallback callback_public_{0};
     // frameReceiveCallback callback_private_{0};

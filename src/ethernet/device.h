@@ -40,6 +40,10 @@ class EthernetDevice* getDevicePointer(int id);
  **/
 int addAllDevices(const char* start_with_prefix);
 
+int broadcastArp();
+
+int getDeviceNumber();
+
 /**
  * Start the ethernet kernel
  *
