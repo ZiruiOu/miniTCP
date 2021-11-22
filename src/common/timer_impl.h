@@ -58,15 +58,9 @@ class Timer {
 
     std::optional<handler_t> SetTimeoutAt(timestamp_t timestamp,
                                           handler_t handler) {
-        // MINITCP_LOG(INFO) << "Timer: add timeout at "
-        //                   << timestamp.time_since_epoch().count() <<
-        //                   std::endl;
         {
             std::scoped_lock lock(timer_mutex_);
             if (this->stop_) {
-                // MINITCP_LOG(ERROR) << "Timer: adding task into a stopped
-                // timer!"
-                //                    << std::endl;
                 return {};
             }
             auto schedule_iter =

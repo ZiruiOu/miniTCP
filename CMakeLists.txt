@@ -83,3 +83,21 @@ target_link_libraries(ip
         network
         ${PCAP_LIBRARY}
 )
+add_executable(tcp_sender src/application/transport/tcp_sender.cc)
+target_link_libraries(tcp_sender
+    PRIVATE
+        utilities
+        ethernet
+        network
+        transport
+        ${PCAP_LIBRARY}
+)
+add_executable(tcp_receiver src/application/transport/tcp_receiver.cc)
+target_link_libraries(tcp_receiver
+    PRIVATE
+        utilities
+        ethernet
+        network
+        transport
+        ${PCAP_LIBRARY}
+)

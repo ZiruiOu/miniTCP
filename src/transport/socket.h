@@ -1,6 +1,8 @@
 #ifndef MINITCP_SRC_TRANSPORT_SOCKET_H_
 #define MINITCP_SRC_TRANSPORT_SOCKET_H_
 
+#include <stdlib.h>
+
 #include <condition_variable>
 #include <list>
 #include <mutex>
@@ -58,71 +60,9 @@ class SocketBase {
           state_(ConnectionState::kClosed) {}
     ~SocketBase() = default;
 
-    bool SetState(enum class ConnectionState new_state) {
+    void SetState(enum ConnectionState new_state) {
         // TODO : implement the state machine transition.
-        // state_ = new_state;
-
-        bool flag = false;
-        switch (state_) {
-            case ConnectionState::kClosed:
-                if (new_state == ConnectionState::kListen ||
-                    new_state == ConnectionState::kSynSent) {
-                    flag = true;
-                    state_ = new_state;
-                }
-                break;
-            case ConnectionState::kSynSent:
-                // FIXME : what about receving reset or close?
-                if (new_state == ConnectionState::kEstablished ||
-                    new_state == ConnectionState::kFinWait1) {
-                    flag = true;
-                    state_ = new_state;
-                }
-                break;
-            case ConnectionState::kSynReceived:
-                // FIXME : what about receving reset or close?
-                if (new_state == ConnectionState::kEstablished) {
-                    flag = true;
-                    state_ = new_state;
-                }
-                break;
-            case ConnectionState::kEstablished:
-                if (new_state == ConnectionState::kFinWait1 ||
-                    new_state == ConnectionState::kClosing) {
-                    flag = true;
-                    state_ = new_state;
-                }
-                break;
-            case ConnectionState::kFinWait1:
-                if (new_state == ConnectionState::kFinWait2) {
-                    flag = true;
-                    state_ = new_state;
-                }
-                break;
-            case ConnectionState::kFinWait2:
-                if (new_state == ConnectionState::kTimeWait) {
-                    flag = true;
-                    state_ = new_state;
-                }
-                break;
-            case ConnectionState::kClosing:
-                // TODO : rename to kCloseWait
-                if (new_state == ConnectionState::kLastAck) {
-                    flag = true;
-                    state = new_state_;
-                }
-                break;
-            case ConnectionState::kTimeWait:
-            case ConnectionState::kLastAck:
-                if (new_state == ConnectionState::kClosed) {
-                    flag = true;
-                    state = new_state_;
-                }
-                break;
-            default:
-                break;
-        }
-        return flag;
+        state_ = new_state;
     }
 
     const enum class ConnectionState GetState() const { return state_; }
@@ -131,7 +71,7 @@ class SocketBase {
 
    protected:
     ip_t dest_ip_;
-    ip_t stc_ip_;
+    ip_t src_ip_;
     port_t dest_port_;
     port_t src_port_;
 
@@ -140,8 +80,14 @@ class SocketBase {
 
 class RequestSocket : public SocketBase {
    public:
-    RequestSocket(ip_t dest_ip, ip_t src_ip, port_t dest_port, port_t src_port)
-        : SocketBase(dest_ip, src_ip, dest_port, src_port) {}
+    RequestSocket(ip_t dest_ip, ip_t src_ip, port_t dest_port, port_t src_port,
+                  std::uint16_t rx_init_seq_num)
+        : SocketBase(dest_ip, src_ip, dest_port, src_port) {
+        SocketBase::SetState(ConnectionState::kSynReceived);
+        // FIXME : not a good idea to use rand() ?
+        tx_init_seq_num_ = rand();
+        rx_init_seq_num_ = rx_init_seq_num;
+    }
     ~RequestSocket() = default;
 
     bool IsValid() const override {
@@ -154,7 +100,10 @@ class RequestSocket : public SocketBase {
     // Actions : SendSynAck, SyncAck Retransmission, Receive Ack.
 
     int SendSynAck();
-    int SynAckRetransmission();
+    int SynAckRetransmit();
+    int ReceiveAck();
+    void SetUpRetransmitTimer();
+    void CancellTimer();
 
     void SetLink(std::list<class RequestSocket*>::iterator iter) {
         link_ = iter;
@@ -163,6 +112,7 @@ class RequestSocket : public SocketBase {
     class Socket* GetSocket() {
         return socket_;
     }
+
     void SetSocket(class Socket* socket) { socket_ = socket; }
 
    private:
@@ -173,9 +123,14 @@ class RequestSocket : public SocketBase {
     // the iterator for listen_queue_ or accept_queue_
     std::list<class RequestSocket*>::iterator link_;
 
+    // local initial sequence number
+    std::uint32_t tx_init_seq_number_;
+    // remote initial sequence number
+    std::uint32_t rx_init_seq_number_;
+
     // the syn ack retransmission timer.
     handler_t retransmit_timer_;
-    // the keepalive timer.
+    int retransmission_count_{0};
 };
 
 class Socket : public SocketBase {
@@ -187,6 +142,8 @@ class Socket : public SocketBase {
     Socket(ip_t dest_ip, ip_t src_ip, port_t dest_port, port_t src_port)
         : SocketBase(dest_ip, src_ip, dest_port, src_port) {
         // TODO : add into constant.
+        // TODO : use link list instead of fix size sender queue.
+        // TODO : receiver would better use ring buffer.
         send_queue_.reset(5000);
         recv_queue_.reset(5000);
     }
@@ -223,6 +180,7 @@ class Socket : public SocketBase {
         std::scoped_lock lock(socket_mutex_);
         accept_queue_.push_front(request);
         request->SetLink(accept_queue_.begin());
+        socket_cv_.notify_one();
     }
 
     class RequestSocket* PopAcceptQueue() {
@@ -231,7 +189,7 @@ class Socket : public SocketBase {
         backlog_count_--;
         accept_queue_.pop_front();
 
-        // TODO : keepalive timer.
+        request->CancellTimer();
         return request;
     }
 
@@ -266,6 +224,9 @@ class Socket : public SocketBase {
     Channel<SocketBuffer> send_queue_;
     // Receiver queue
     Channel<SocketBuffer> recv_queue_;
+
+    // keepalive timer
+    // retransmit timer
 };
 }  // namespace transport
 }  // namespace minitcp

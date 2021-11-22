@@ -2,7 +2,6 @@ project(transport)
 
 add_library(transport
     STATIC
-        socket.cc
         tcp_kernel.cc
 )
 

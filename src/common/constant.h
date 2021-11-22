@@ -3,6 +3,8 @@
 
 #include <cstdint>
 
+#include "types.h"
+
 namespace minitcp {
 
 // pcap parameters
@@ -47,8 +49,12 @@ const int kRipPoisonThresh = 16;
 
 // for ip transmission
 
-// for tcp transmission
-const int kMaxSegmentSize = 600;
+// tcp type
+const int kIpProtoTcp = 6;
+
+// tcp maximum segment size
+const int kTCPMss =
+    kFramePayloadSize - sizeof(struct ip) - sizeof(struct tcphdr);
 }  // namespace minitcp
 
 #endif  // ! MINITCP_SRC_COMMON_CONSTANT_H_
