@@ -9,7 +9,7 @@ namespace minitcp {
 
 // pcap parameters
 // snap len
-const int kPcapSnapLen = 3000;
+const int kPcapSnapLen = 65536;
 // timeout
 const int kPcapTimeout = -1;
 
@@ -50,7 +50,7 @@ const int kRipPoisonThresh = 16;
 // for ip transmission
 
 // tcp type
-const int kIpProtoTcp = 6;
+const std::uint8_t kIpProtoTcp = 6;
 
 // tcp maximum segment size
 const int kTCPMss =

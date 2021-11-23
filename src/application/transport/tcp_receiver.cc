@@ -18,13 +18,15 @@
 #include "../ethernet/packetio.h"
 #include "../network/ip.h"
 #include "../network/routing.h"
+#include "../transport/socket.h"
 #include "../transport/tcp_kernel.h"
 
 using namespace minitcp;
 
 int LinkCallback(const void *buffer, int length, int device_id) {
-    mac_t *dest_mac = (struct ether_addr *)buffer;
-    mac_t *src_mac = (struct ether_addr *)(buffer + 6);
+    mac_t *dest_mac = reinterpret_cast<mac_t *>(const_cast<void *>(buffer));
+    mac_t *src_mac = dest_mac + 1;
+
     std::uint16_t ethernet_type = ntohs(*(std::uint16_t *)(buffer + 12));
 
     auto device_ptr = ethernet::getDevicePointer(device_id);
@@ -45,7 +47,6 @@ int LinkCallback(const void *buffer, int length, int device_id) {
         } else if (ethernet_type == kEtherIPv4Type) {
             network::kernel_callback(buffer + 14, length - 14 - 4);
         } else {
-            char *packet_content = (char *)(buffer + 14);
             MINITCP_ASSERT(device_ptr) << "getDevicePointer error" << std::endl;
             std::cout << "device " << device_ptr->GetName() << " receive "
                       << length << " bytes, and the message is "
@@ -64,10 +65,16 @@ int NetworkCallback(const void *buffer, int length) {
     // 2. else find a good
     int status = 0;
     if (network::isLocalIP(ip_header->ip_dst)) {
-        MINITCP_LOG(INFO) << "NetworkCallback: " << inet_ntoa(ip_header->ip_dst)
-                          << " receive a message from "
-                          << inet_ntoa(ip_header->ip_src) << " the content is "
-                          << ip_content << std::endl;
+        if (ip_header->ip_p == kIpProtoTcp) {
+            std::cout << "wow\n";
+            transport::tcpReceiveCallback(ip_header, buffer + sizeof(struct ip),
+                                          length - sizeof(struct ip));
+        } else {
+            MINITCP_LOG(INFO)
+                << "NetworkCallback: " << inet_ntoa(ip_header->ip_dst)
+                << " receive a message from " << inet_ntoa(ip_header->ip_src)
+                << " the content is " << ip_content << std::endl;
+        }
     } else {
         status = network::forwardIPPacket(ip_header->ip_src, ip_header->ip_dst,
                                           buffer, length);
@@ -95,11 +102,33 @@ int main(int argc, char *argv[]) {
     inet_aton(src_ip_str, &src_ip);
     inet_aton(dest_ip_str, &dest_ip);
 
-    while (true) {
-        // transport::sendTCPPacket(src_ip, dest_ip, htons(80), htons(80), 10,
-        // 0, TH_SYN, 0,
-        //                         NULL, 0);
-        // std::this_thread::sleep_for(std::chrono::milliseconds(10000));
+    struct sockaddr_in address;
+
+    class transport::Socket socket;
+
+    connection_key_t key = transport::makeKey(dest_ip, src_ip, 80, 80, true);
+
+    insertSocket(key, &socket);
+
+    if (!transport::findSocket(key)) {
+        MINITCP_LOG(ERROR) << " socket is not inserted into the socket map."
+                           << std::endl;
     }
+
+    address.sin_family = AF_INET;
+    address.sin_addr = src_ip;
+    address.sin_port = 80;
+    socket.Bind((struct sockaddr *)&address, sizeof(address));
+
+    socket.Listen(10);
+
+    std::this_thread::sleep_for(std::chrono::seconds(30));
+
+    socket.Accept();
+
+    MINITCP_LOG(INFO) << "nice boat! " << std::endl;
+
+    while (true)
+        ;
     return 0;
 }

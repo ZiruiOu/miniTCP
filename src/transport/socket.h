@@ -10,6 +10,7 @@
 #include "../common/timer.h"
 #include "../common/timer_impl.h"
 #include "../common/types.h"
+#include "../ethernet/device.h"
 #include "channel.h"
 
 namespace minitcp {
@@ -19,12 +20,7 @@ using listnode_t = std::list<class RequestSocket*>::iterator;
 class Socket;
 class RequestSocket;
 
-// enum class SocketState {
-//     kFree = 0,
-//     kUnConnected,
-// };
-
-enum class ConectionState {
+enum class ConnectionState {
     kClosed,
     kListen,
     kSynSent,
@@ -52,7 +48,7 @@ class SocketBase {
    public:
     SocketBase() : state_(ConnectionState::kClosed) {}
     // TODO : sensure network endian for dest_port and src_port
-    SocketBase(ip_t dest_ip, ip_t src_ip, port_t dest_port, port_t src_port_)
+    SocketBase(ip_t dest_ip, ip_t src_ip, port_t dest_port, port_t src_port)
         : dest_ip_(dest_ip),
           src_ip_(src_ip),
           dest_port_(dest_port),
@@ -65,7 +61,7 @@ class SocketBase {
         state_ = new_state;
     }
 
-    const enum class ConnectionState GetState() const { return state_; }
+    const enum ConnectionState GetState() const { return state_; }
 
     virtual bool IsValid() const = 0;
 
@@ -81,7 +77,7 @@ class SocketBase {
 class RequestSocket : public SocketBase {
    public:
     RequestSocket(ip_t dest_ip, ip_t src_ip, port_t dest_port, port_t src_port,
-                  std::uint16_t rx_init_seq_num)
+                  std::uint32_t rx_init_seq_num)
         : SocketBase(dest_ip, src_ip, dest_port, src_port) {
         SocketBase::SetState(ConnectionState::kSynReceived);
         // FIXME : not a good idea to use rand() ?
@@ -95,6 +91,8 @@ class RequestSocket : public SocketBase {
         return true;
     }
 
+    int ReceiveStateProcess(struct tcphdr* tcp_header);
+
     // state transition:
     // kSynReceived -> kEstablished
     // Actions : SendSynAck, SyncAck Retransmission, Receive Ack.
@@ -104,6 +102,8 @@ class RequestSocket : public SocketBase {
     int ReceiveAck();
     void SetUpRetransmitTimer();
     void CancellTimer();
+
+    std::list<class RequestSocket*>::iterator GetLink() { return link_; }
 
     void SetLink(std::list<class RequestSocket*>::iterator iter) {
         link_ = iter;
@@ -124,9 +124,9 @@ class RequestSocket : public SocketBase {
     std::list<class RequestSocket*>::iterator link_;
 
     // local initial sequence number
-    std::uint32_t tx_init_seq_number_;
+    std::uint32_t tx_init_seq_num_;
     // remote initial sequence number
-    std::uint32_t rx_init_seq_number_;
+    std::uint32_t rx_init_seq_num_;
 
     // the syn ack retransmission timer.
     handler_t retransmit_timer_;
@@ -136,16 +136,25 @@ class RequestSocket : public SocketBase {
 class Socket : public SocketBase {
    public:
     // TODO : arbitary bind a local ip and local port.
-    Socket() : SocketBase(ip_t{0}, ip_t{0}, 0, 0) {}
+    Socket() : SocketBase(ip_t{0}, ip_t{ethernet::getLocalIP()}, 0, 0) {
+        // FIXME : not a good idea to use rand() ?
+        seq_num_ = rand();
+        ack_num_ = 0;
+        next_seq_num_ = seq_num_ + 1;
+    }
 
     // FIXME : only estiblished socket can use.
-    Socket(ip_t dest_ip, ip_t src_ip, port_t dest_port, port_t src_port)
-        : SocketBase(dest_ip, src_ip, dest_port, src_port) {
+    Socket(ip_t dest_ip, ip_t src_ip, port_t dest_port, port_t src_port,
+           std::uint32_t seq_num, std::uint32_t ack_num)
+        : SocketBase(dest_ip, src_ip, dest_port, src_port),
+          seq_num_(seq_num),
+          ack_num_(ack_num) {
         // TODO : add into constant.
         // TODO : use link list instead of fix size sender queue.
         // TODO : receiver would better use ring buffer.
-        send_queue_.reset(5000);
-        recv_queue_.reset(5000);
+        // send_queue_(5000);
+        // recv_queue_.reset(5000);
+        next_seq_num_ = seq_num_ + 1;
     }
     ~Socket() = default;
 
@@ -160,6 +169,13 @@ class Socket : public SocketBase {
         return true;
     }
 
+    int ReceiveRequest(ip_t remote_ip, ip_t local_ip,
+                       struct tcphdr* tcp_header);
+    int ReceiveConnection(struct tcphdr* tcp_header);
+    int ReceiveStateProcess(ip_t remote_ip, ip_t local_ip,
+                            struct tcphdr* tcp_header, const void* buffer,
+                            int length);
+
     bool AddToListenQueue(class RequestSocket* request) {
         std::scoped_lock lock(socket_mutex_);
         if (backlog_count_ >= max_backlog_) {
@@ -173,7 +189,16 @@ class Socket : public SocketBase {
 
     void RemoveFromListenQueue(std::list<class RequestSocket*>::iterator iter) {
         std::scoped_lock lock(socket_mutex_);
+        backlog_count_--;
         listen_queue_.erase(iter);
+    }
+
+    void MoveToAcceptQueue(class RequestSocket* request) {
+        std::scoped_lock lock(socket_mutex_);
+        listen_queue_.erase(request->GetLink());
+        accept_queue_.push_front(request);
+        request->SetLink(accept_queue_.begin());
+        socket_cv_.notify_one();
     }
 
     void AddToAcceptQueue(class RequestSocket* request) {
@@ -197,7 +222,7 @@ class Socket : public SocketBase {
     int Bind(struct sockaddr* address, socklen_t address_len);
     int Listen(int backlog);
     class RequestSocket* Accept();
-    int Connect();
+    int Connect(struct sockaddr* address, socklen_t address_len);
     int Close();
 
    private:
@@ -216,14 +241,18 @@ class Socket : public SocketBase {
     int backlog_count_{0};
 
     // Request Socket with state = SYN_RECV
-    std::list<class RequestSock*> listen_queue_;
+    std::list<class RequestSocket*> listen_queue_;
     // Request Socket with state = ESTABLISH.
-    std::list<class RequestSock*> accept_queue_;
+    std::list<class RequestSocket*> accept_queue_;
+
+    std::uint32_t seq_num_;
+    std::uint32_t ack_num_;
+    std::uint32_t next_seq_num_;
 
     // Sender queue
-    Channel<SocketBuffer> send_queue_;
+    // Channel<SocketBuffer> send_queue_;
     // Receiver queue
-    Channel<SocketBuffer> recv_queue_;
+    // Channel<SocketBuffer> recv_queue_;
 
     // keepalive timer
     // retransmit timer

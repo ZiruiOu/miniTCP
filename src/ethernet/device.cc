@@ -37,6 +37,12 @@ class EthernetDevice* getDevicePointer(int id) {
     return kernel.GetDevicePointer(id);
 }
 
+ip_t getLocalIP() {
+    class EthernetDevice* device = getDevicePointer(0);
+    MINITCP_ASSERT(device) << "getLocalIP : no available device. " << std::endl;
+    return device->GetIpAddress();
+}
+
 void start() {
     class EthernetKernel& kernel = EthernetKernel::GetInstance();
     kernel.Start();

@@ -10,9 +10,9 @@ def cancell_bypass_ip():
 def install_ns(script_path: str):
     os.system("bash " + script_path)
 
-def lauch_terminals(script_path: str, num_terminals: int):
+def lauch_terminals(script_path: str, num_terminals: int, exec_path: str):
     for i in range(num_terminals):
-        os.system("gnome-terminal -e 'bash -c \" bash %s %d; exec bash\"'"%(script_path, i+1))
+        os.system("gnome-terminal -e 'bash -c \" bash %s %d %s; exec bash\"'"%(script_path, i+1, exec_path))
 
 def delete_ns(script_path: str, num_terminals: int):
     for i in range(num_terminals):

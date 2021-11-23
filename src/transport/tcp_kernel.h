@@ -2,6 +2,7 @@
 #define MINITCP_SRC_TRANSPORT_TCP_KERNEL_H_
 
 #include "../common/types.h"
+#include "socket.h"
 
 namespace minitcp {
 namespace transport {
@@ -56,6 +57,9 @@ int getNextFd();
 //   |                             data                              |
 //   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 
+connection_key_t makeKey(ip_t remote_ip, ip_t local_ip, port_t remote_port,
+                         port_t local_port, bool is_listen);
+
 std::uint8_t* createTCPPacket(port_t src_port, port_t dest_port,
                               std::uint32_t sequence, std::uint32_t ack,
                               std::uint8_t flags, std::uint16_t window,
@@ -64,6 +68,22 @@ std::uint8_t* createTCPPacket(port_t src_port, port_t dest_port,
 int sendTCPPacket(ip_t src_ip, ip_t dest_ip, port_t src_port, port_t dest_port,
                   std::uint32_t sequence, std::uint32_t ack, std::uint8_t flags,
                   std::uint16_t window, const void* buffer, int len);
+
+int insertRequest(const connection_key_t& key, class RequestSocket* request);
+
+class Socket* findSocket(const connection_key_t& key);
+int insertSocket(const connection_key_t& key, class Socket* socket);
+
+/**@brief TCP Packet receive callback.
+ *
+ * @param [in] ip_header : ip header of the received packet.
+ * @param [in] buffer : ip payload.
+ * @param length : length of the ip payload.
+ *
+ * @return return 0 on succcessfully parse the packet, -1 on failure.
+ **/
+int tcpReceiveCallback(const struct ip* ip_header, const void* buffer,
+                       int length);
 
 }  // namespace transport
 }  // namespace minitcp

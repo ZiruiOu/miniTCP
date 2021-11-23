@@ -3,6 +3,8 @@ project(transport)
 add_library(transport
     STATIC
         tcp_kernel.cc
+        socket.cc
+        tcp_kernel.cc
 )
 
 target_include_directories(transport

@@ -39,7 +39,6 @@ class Channel {
         if (next_tail == head_) {
             return false;
         }
-        // TODO : move ?
         buffer_[next_tail] = item;
         tail_ = next_tail;
         return true;

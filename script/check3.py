@@ -5,6 +5,7 @@ from utils import install_ns, lauch_terminals, delete_ns, bypass_kernel_ip, canc
 
 CHECKPOINT5_INSTALL_PATH: str = "script/install_topo1.sh"
 CHECKPOINT5_SCRIPT_PATH: str = "script/enter_ns.sh"
+CHECKPOINT3_EXEC_PATH: str = "../../../script/exec_ns_ip.sh"
 CHECKPOINT5_DELETE_PATH: str = "script/exit_ns.sh"
 NUM_NETWORK: int = 2
 
@@ -16,6 +17,6 @@ args = parser.parse_args()
 if __name__ == "__main__":
     if args.install:
         install_ns(CHECKPOINT5_INSTALL_PATH)
-        lauch_terminals(CHECKPOINT5_SCRIPT_PATH, NUM_NETWORK)
+        lauch_terminals(CHECKPOINT5_SCRIPT_PATH, NUM_NETWORK, CHECKPOINT3_EXEC_PATH)
     elif args.delete:
         delete_ns(CHECKPOINT5_DELETE_PATH, NUM_NETWORK)
