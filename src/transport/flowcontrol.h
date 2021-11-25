@@ -4,11 +4,11 @@
 namespace minitcp {
 namespace transport {
 class FlowControlManager {
-   public:
-    FlowControlManager() = default;
-    ~FlowContronManager() = default;
+ public:
+  FlowControlManager() = default;
+  ~FlowControlManager() = default;
 
-   private:
+ private:
 };
 }  // namespace transport
 }  // namespace minitcp

@@ -36,6 +36,21 @@ if (ENABLE_UNIT_TESTS)
         NAME test_gtest
         COMMAND $<TARGET_FILE:test_gtest>
     )
+    add_executable(test_intrusive "")
+    target_sources(test_intrusive
+        PRIVATE
+            ./src/common/intrusive_test.cc
+    )
+    target_link_libraries(test_intrusive
+        PRIVATE
+            gtest_main
+            utilities
+    )
+    enable_testing()
+    add_test(
+        NAME test_intrusive
+        COMMAND $<TARGET_FILE:test_gtest>
+    )
 endif()
 
 add_executable(link_send src/application/link/link_send.cc)

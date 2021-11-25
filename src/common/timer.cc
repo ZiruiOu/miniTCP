@@ -7,24 +7,25 @@
 
 namespace minitcp {
 void timerStart() {
-    Timer& timer = Timer::GetInstance();
-    MINITCP_LOG(INFO) << " Timer: timer start." << std::endl;
-    timer.Start();
+  Timer& timer = Timer::GetInstance();
+  MINITCP_LOG(INFO) << " Timer: timer start." << std::endl;
+  timer.Start();
 }
 
 void timerStop() {
-    Timer& timer = Timer::GetInstance();
-    timer.Stop();
+  Timer& timer = Timer::GetInstance();
+  timer.Stop();
 }
 
 std::optional<handler_t> setTimerAfter(int milliseconds, handler_t handler) {
-    Timer& timer = Timer::GetInstance();
-    return timer.SetTimeoutAfter(milliseconds, handler);
+  Timer& timer = Timer::GetInstance();
+  return timer.SetTimeoutAfter(milliseconds, handler);
 }
 
 int cancellTimer(handler_t handler) {
-    Timer& timer = Timer::GetInstance();
-    return timer.UnSetTimeout(handler);
+  Timer& timer = Timer::GetInstance();
+  int status = timer.UnSetTimeout(handler);
+  return status;
 }
 
 }  // namespace minitcp

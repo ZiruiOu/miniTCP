@@ -8,8 +8,11 @@ namespace minitcp {
 namespace transport {
 
 class Socket;
-class RequestSocket;
 
+/**@brief : get a new fd from Linux kernel.
+ *
+ * @return : return -1 on failure, else return the new fd.
+ */
 int getNextFd();
 
 // struct tcphdr {
@@ -57,22 +60,52 @@ int getNextFd();
 //   |                             data                              |
 //   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 
-connection_key_t makeKey(ip_t remote_ip, ip_t local_ip, port_t remote_port,
-                         port_t local_port, bool is_listen);
-
 std::uint8_t* createTCPPacket(port_t src_port, port_t dest_port,
                               std::uint32_t sequence, std::uint32_t ack,
                               std::uint8_t flags, std::uint16_t window,
                               const void* buffer, int len);
 
+/**@brief send a TCP packet by calling sendIPPacket.
+ *
+ * @param src_ip  local ip of the socket.
+ * @param dest_ip remote ip of the socket.
+ * @param src_port local port of the socket.
+ * @param dest_port remote port of the socket.
+ * @param sequence  sequence number of the TCP packet.
+ * @param ack       ack number of the TCP packet.
+ * @param flags     TCP control flags.
+ * @param window    the receiver window (for flow control).
+ * @param buffer    TCP payload.
+ * @param len       length of the TCP payload.
+ *
+ * @return 0 on success, 1 on failure.
+ **/
 int sendTCPPacket(ip_t src_ip, ip_t dest_ip, port_t src_port, port_t dest_port,
                   std::uint32_t sequence, std::uint32_t ack, std::uint8_t flags,
                   std::uint16_t window, const void* buffer, int len);
 
-int insertRequest(const connection_key_t& key, class RequestSocket* request);
+connection_key_t makeKey(ip_t remote_ip, ip_t local_ip, port_t remote_port,
+                         port_t local_port);
 
-class Socket* findSocket(const connection_key_t& key);
-int insertSocket(const connection_key_t& key, class Socket* socket);
+[[nodiscard]] int insertListen(ip_t remote_ip, ip_t local_ip,
+                               port_t remote_port, port_t local_port,
+                               class RequestSocket* request);
+
+class Socket* findListen(ip_t remote_ip, ip_t local_ip, port_t remote_port,
+                         port_t local_port);
+
+int removeListen(ip_t remote_ip, ip_t local_ip, port_t remote_port,
+                 port_t local_port);
+
+[[nodiscard]] int insertEstablish(ip_t remote_ip, ip_t local_ip,
+                                  port_t remote_port, port_t local_port,
+                                  class Socket* socket);
+
+class Socket* findEstablish(ip_t remote_ip, ip_t local_ip, port_t remote_port,
+                            port_t local_port);
+
+int removeEstablish(ip_t remote_ip, ip_t local_ip, port_t remote_port,
+                    port_t local_port);
 
 /**@brief TCP Packet receive callback.
  *

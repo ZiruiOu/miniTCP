@@ -3,10 +3,13 @@
 
 #include <stdlib.h>
 
+#include <atomic>
+#include <chrono>
 #include <condition_variable>
 #include <list>
 #include <mutex>
 
+#include "../common/intrusive.h"
 #include "../common/timer.h"
 #include "../common/timer_impl.h"
 #include "../common/types.h"
@@ -15,247 +18,247 @@
 
 namespace minitcp {
 namespace transport {
-using listnode_t = std::list<class RequestSocket*>::iterator;
-
 class Socket;
-class RequestSocket;
 
 enum class ConnectionState {
-    kClosed,
-    kListen,
-    kSynSent,
-    kSynReceived,
-    kEstablished,
-    kFinWait1,
-    kFinWait2,
-    kClosing,
-    kLastAck,
-    kTimeWait,
+  kClosed,
+  kListen,
+  kSynSent,
+  kSynReceived,
+  kEstablished,
+  kFinWait1,
+  kFinWait2,
+  kClosing,
+  kLastAck,
+  kTimeWait,
 };
 
 struct SocketBuffer {
-    std::size_t length;
-    char* buffer;
+  char* buffer;
+  std::size_t length;
 
-    ip_t dest_ip;
-    ip_t src_ip;
-    port_t dest_port;
-    port_t src_port;
+  std::uint8_t flags;
+  std::uint32_t seq;
+  std::uint32_t ack;
+  std::uint32_t recv_window;
+
+  struct list_head link {
+    nullptr, nullptr
+  };
+
+  std::chrono::time_point<std::chrono::high_resolution_clock> send_time;
+  std::chrono::time_point<std::chrono::high_resolution_clock> ack_time;
 };
 
 // Assumption : the dest_port and src_port should be in big endian.
 class SocketBase {
-   public:
-    SocketBase() : state_(ConnectionState::kClosed) {}
-    // TODO : sensure network endian for dest_port and src_port
-    SocketBase(ip_t dest_ip, ip_t src_ip, port_t dest_port, port_t src_port)
-        : dest_ip_(dest_ip),
-          src_ip_(src_ip),
-          dest_port_(dest_port),
-          src_port_(src_port),
-          state_(ConnectionState::kClosed) {}
-    ~SocketBase() = default;
+ public:
+  SocketBase() : state_(ConnectionState::kClosed) {}
+  // TODO : sensure network endian for dest_port and src_port
+  SocketBase(ip_t dest_ip, ip_t src_ip, port_t dest_port, port_t src_port)
+      : dest_ip_(dest_ip),
+        src_ip_(src_ip),
+        dest_port_(dest_port),
+        src_port_(src_port),
+        state_(ConnectionState::kClosed) {}
+  ~SocketBase() = default;
 
-    void SetState(enum ConnectionState new_state) {
-        // TODO : implement the state machine transition.
-        state_ = new_state;
-    }
+  // disallow copy and move
+  SocketBase(const SocketBase&) = delete;
+  SocketBase& operator=(const SocketBase&) = delete;
 
-    const enum ConnectionState GetState() const { return state_; }
+  SocketBase(SocketBase&&) = delete;
+  SocketBase& operator=(SocketBase&&) = delete;
 
-    virtual bool IsValid() const = 0;
+  void SetState(enum ConnectionState new_state) {
+    // TODO : implement the state machine transition.
+    state_ = new_state;
+  }
 
-   protected:
-    ip_t dest_ip_;
-    ip_t src_ip_;
-    port_t dest_port_;
-    port_t src_port_;
+  const enum ConnectionState GetState() const { return state_; }
 
-    enum ConnectionState state_;
-};
+  virtual bool IsValid() const = 0;
 
-class RequestSocket : public SocketBase {
-   public:
-    RequestSocket(ip_t dest_ip, ip_t src_ip, port_t dest_port, port_t src_port,
-                  std::uint32_t rx_init_seq_num)
-        : SocketBase(dest_ip, src_ip, dest_port, src_port) {
-        SocketBase::SetState(ConnectionState::kSynReceived);
-        // FIXME : not a good idea to use rand() ?
-        tx_init_seq_num_ = rand();
-        rx_init_seq_num_ = rx_init_seq_num;
-    }
-    ~RequestSocket() = default;
+ protected:
+  ip_t dest_ip_;
+  ip_t src_ip_;
+  port_t dest_port_;
+  port_t src_port_;
 
-    bool IsValid() const override {
-        // TODO : check state
-        return true;
-    }
-
-    int ReceiveStateProcess(struct tcphdr* tcp_header);
-
-    // state transition:
-    // kSynReceived -> kEstablished
-    // Actions : SendSynAck, SyncAck Retransmission, Receive Ack.
-
-    int SendSynAck();
-    int SynAckRetransmit();
-    int ReceiveAck();
-    void SetUpRetransmitTimer();
-    void CancellTimer();
-
-    std::list<class RequestSocket*>::iterator GetLink() { return link_; }
-
-    void SetLink(std::list<class RequestSocket*>::iterator iter) {
-        link_ = iter;
-    }
-
-    class Socket* GetSocket() {
-        return socket_;
-    }
-
-    void SetSocket(class Socket* socket) { socket_ = socket; }
-
-   private:
-    // the connection socket established by this RequestSocket.
-    class Socket* socket_{nullptr};
-    // the pointer of the listen socket
-    class Socket* listen_socket_{nullptr};
-    // the iterator for listen_queue_ or accept_queue_
-    std::list<class RequestSocket*>::iterator link_;
-
-    // local initial sequence number
-    std::uint32_t tx_init_seq_num_;
-    // remote initial sequence number
-    std::uint32_t rx_init_seq_num_;
-
-    // the syn ack retransmission timer.
-    handler_t retransmit_timer_;
-    int retransmission_count_{0};
+  enum ConnectionState state_;
 };
 
 class Socket : public SocketBase {
-   public:
-    // TODO : arbitary bind a local ip and local port.
-    Socket() : SocketBase(ip_t{0}, ip_t{ethernet::getLocalIP()}, 0, 0) {
-        // FIXME : not a good idea to use rand() ?
-        seq_num_ = rand();
-        ack_num_ = 0;
-        next_seq_num_ = seq_num_ + 1;
+ public:
+  // TODO : arbitary bind a local ip and local port.
+  Socket() : SocketBase(ip_t{0}, ip_t{ethernet::getLocalIP()}, 0, 0) {
+    // FIXME : not a good idea to use rand() ?
+    send_window_ = 10000;
+    recv_window_ = 4096;
+
+    send_seq_num_ = rand();
+    next_seq_num_ = send_seq_num_;
+    send_unack_base_ = send_seq_num_;
+    send_unack_nextseq_ = send_seq_num_;
+
+    recv_seq_num_ = 0;
+  }
+
+  // FIXME : only estiblished socket can use.
+  Socket(ip_t dest_ip, ip_t src_ip, port_t dest_port, port_t src_port,
+         std::uint32_t send_seq_num, std::uint32_t recv_seq_num)
+      : SocketBase(dest_ip, src_ip, dest_port, src_port),
+        send_seq_num_(send_seq_num),
+        recv_seq_num_(recv_seq_num) {
+    // TODO : add into constant.
+    // TODO : receiver would better use ring buffer.
+    send_window_ = 10000;
+    recv_window_ = 4096;
+
+    next_seq_num_ = send_seq_num_;
+    send_unack_base_ = send_unack_nextseq_ = send_seq_num_;
+  }
+
+  ~Socket() = default;
+
+  bool IsValid() const override {
+    // TODO : check state
+    return true;
+  }
+
+  int ReceiveRequest(ip_t remote_ip, ip_t local_ip, struct tcphdr* tcp_header);
+  int ReceiveConnection(struct tcphdr* tcp_header);
+  int ReceiveStateProcess(ip_t remote_ip, ip_t local_ip,
+                          struct tcphdr* tcp_header, const void* buffer,
+                          int length);
+
+  bool AddToListenQueue(class Socket* request) {
+    std::scoped_lock lock(socket_mutex_);
+    if (backlog_count_ >= max_backlog_) {
+      return false;
     }
+    // backlog_count_++;
+    //  listen_queue_.push_front(request);
+    //  request->lietsn_link_ = listen_queue_.begin();
+    return true;
+  }
 
-    // FIXME : only estiblished socket can use.
-    Socket(ip_t dest_ip, ip_t src_ip, port_t dest_port, port_t src_port,
-           std::uint32_t seq_num, std::uint32_t ack_num)
-        : SocketBase(dest_ip, src_ip, dest_port, src_port),
-          seq_num_(seq_num),
-          ack_num_(ack_num) {
-        // TODO : add into constant.
-        // TODO : use link list instead of fix size sender queue.
-        // TODO : receiver would better use ring buffer.
-        // send_queue_(5000);
-        // recv_queue_.reset(5000);
-        next_seq_num_ = seq_num_ + 1;
-    }
-    ~Socket() = default;
+  void RemoveFromListenQueue(class Socket* request) {
+    std::scoped_lock lock(socket_mutex_);
+    // backlog_count_--;
+    // listen_queue_.erase(request->listen_link_);
+  }
 
-    Socket& operator=(const Socket&) = delete;
-    Socket(const Socket&) = delete;
+  void MoveToAcceptQueue(class Socket* request) {
+    std::scoped_lock lock(socket_mutex_);
+    // listen_queue_.erase(request->GetLink());
+    accept_queue_.push_front(request);
+    request->accept_link_ = accept_queue_.begin();
+    socket_cv_.notify_one();
+  }
 
-    Socket&& operator=(Socket&&) = delete;
-    Socket(Socket&&) = delete;
+  void AddToAcceptQueue(class Socket* request) {
+    std::scoped_lock lock(socket_mutex_);
+    accept_queue_.push_front(request);
+    request->accept_link_ = accept_queue_.begin();
+    socket_cv_.notify_one();
+  }
 
-    bool IsValid() const override {
-        // TODO : check state
-        return true;
-    }
+  class Socket* PopAcceptQueue() {
+    std::scoped_lock lock(socket_mutex_);
+    class Socket* child_socket = accept_queue_.front();
+    backlog_count_--;
+    accept_queue_.pop_front();
+    return child_socket;
+  }
 
-    int ReceiveRequest(ip_t remote_ip, ip_t local_ip,
-                       struct tcphdr* tcp_header);
-    int ReceiveConnection(struct tcphdr* tcp_header);
-    int ReceiveStateProcess(ip_t remote_ip, ip_t local_ip,
-                            struct tcphdr* tcp_header, const void* buffer,
-                            int length);
+  // socket send functions.
+  // send Syn, SynAck or data packets and set up timer for these packets.
+  int SendTCPPacketImpl(std::uint8_t flags, const void* buffer, int length);
+  // send Ack/RST flags
+  // NOTIMPLEMENTED : piggyback some data when the pending queue is not null.
+  int SendTCPPacketPush(std::uint32_t sequence, std::uint32_t ack,
+                        std::uint8_t flags, const void* buffer, int length);
 
-    bool AddToListenQueue(class RequestSocket* request) {
-        std::scoped_lock lock(socket_mutex_);
-        if (backlog_count_ >= max_backlog_) {
-            return false;
-        }
-        backlog_count_++;
-        listen_queue_.push_front(request);
-        request->SetLink(listen_queue_.begin());
-        return true;
-    }
+  // Socket Actions: send and receive
+  int Bind(struct sockaddr* address, socklen_t address_len);
+  int Listen(int backlog);
+  class Socket* Accept();
+  int Connect(struct sockaddr* address, socklen_t address_len);
+  int Close();
 
-    void RemoveFromListenQueue(std::list<class RequestSocket*>::iterator iter) {
-        std::scoped_lock lock(socket_mutex_);
-        backlog_count_--;
-        listen_queue_.erase(iter);
-    }
+ private:
+  /* TODO : RTT estimation */
+  /* TODO : congestion control */
+  /* TODO : flow control */
 
-    void MoveToAcceptQueue(class RequestSocket* request) {
-        std::scoped_lock lock(socket_mutex_);
-        listen_queue_.erase(request->GetLink());
-        accept_queue_.push_front(request);
-        request->SetLink(accept_queue_.begin());
-        socket_cv_.notify_one();
-    }
+  // retransmission management
+  void RtxEnqueue(struct SocketBuffer* buffer);
+  struct SocketBuffer* RtxDeque();
+  void RetransmitCallback();
 
-    void AddToAcceptQueue(class RequestSocket* request) {
-        std::scoped_lock lock(socket_mutex_);
-        accept_queue_.push_front(request);
-        request->SetLink(accept_queue_.begin());
-        socket_cv_.notify_one();
-    }
+  // send queue management
+  void TxEnqueue(struct SocketBuffer* buffer);
+  void TxDeque();
 
-    class RequestSocket* PopAcceptQueue() {
-        std::scoped_lock lock(socket_mutex_);
-        class RequestSocket* request = accept_queue_.front();
-        backlog_count_--;
-        accept_queue_.pop_front();
+  // RAII reference counting.
+  std::atomic<std::uint32_t> ref_cnt_;
 
-        request->CancellTimer();
-        return request;
-    }
+  // socket mutex
+  std::mutex socket_mutex_;
+  // socket condition variable
+  std::condition_variable socket_cv_;
 
-    // Socket Actions: send and receive
-    int Bind(struct sockaddr* address, socklen_t address_len);
-    int Listen(int backlog);
-    class RequestSocket* Accept();
-    int Connect(struct sockaddr* address, socklen_t address_len);
-    int Close();
+  // The socket backlog, i.e. the maximum of listen_queue_.length +
+  // accept_queue_.length
+  int max_backlog_{1};
+  int backlog_count_{0};
 
-   private:
-    /* TODO : RTT estimation */
-    /* TODO : congestion control */
-    /* TODO : flow control */
+  // iterator for listen and accept.
+  // can be only used in state of kSynSent/kSynReceived.
+  std::list<class Socket*>::iterator accept_link_;
 
-    // socket mutex
-    std::mutex socket_mutex_;
-    // socket condition variable
-    std::condition_variable socket_cv_;
+  // the listen socket this socket belongs to.
+  class Socket* listen_socket_{nullptr};
 
-    // The socket backlog, i.e. the maximum of listen_queue_.length +
-    // accept_queue_.length
-    int max_backlog_{1};
-    int backlog_count_{0};
+  // queue for accept.
+  // can only be used in the state of kListen.
+  std::list<class Socket*> accept_queue_;
 
-    // Request Socket with state = SYN_RECV
-    std::list<class RequestSocket*> listen_queue_;
-    // Request Socket with state = ESTABLISH.
-    std::list<class RequestSocket*> accept_queue_;
+  // for sending and receiving.
+  // std::uint32_t seq_num_;
+  // std::uint32_t ack_num_;
+  // std::uint32_t next_seq_num_;
 
-    std::uint32_t seq_num_;
-    std::uint32_t ack_num_;
-    std::uint32_t next_seq_num_;
+  std::uint32_t send_window_;
+  std::uint32_t recv_window_;
+  std::uint32_t send_seq_num_;
+  std::uint32_t recv_seq_num_;
+  std::uint32_t next_seq_num_;
 
-    // Sender queue
-    // Channel<SocketBuffer> send_queue_;
-    // Receiver queue
-    // Channel<SocketBuffer> recv_queue_;
+  std::uint32_t send_unack_base_;
+  std::uint32_t send_unack_nextseq_;
 
-    // keepalive timer
-    // retransmit timer
+  // [send_unack_base_, send_unack_nextseq_)
+  struct list_head retransmit_queue_ {
+    &retransmit_queue_, &retransmit_queue_
+  };
+  // [send_seq_num_, next_seq_num_)
+  struct list_head send_queue_ {
+    &send_queue_, &send_queue_
+  };
+  // for sampling.
+  std::vector<SocketBuffer*> send_history_;
+
+  // Sender queue
+  // Channel<SocketBuffer> send_queue_;
+  // Receiver queue
+  // Channel<SocketBuffer> recv_queue_;
+
+  // keepalive timer or Syn Ack retransmission.
+  handler_t keepalive_timer_;
+  // retransmit timer
+  handler_t retransmit_timer_;
 };
 }  // namespace transport
 }  // namespace minitcp
