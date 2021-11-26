@@ -25,12 +25,13 @@ connection_key_t makeKey(ip_t remote_ip, ip_t local_ip, port_t remote_port,
 static std::mutex kernel_mutex_;
 // TODO : search establish_map first, and then listen_map.
 static std::map<connection_key_t, class Socket*> establish_map;
-static std::map<connection_key_t, class Socket*> listen_map;
+static std::map<std::pair<std::uint32_t, std::uint16_t>, class Socket*>
+    listen_map;
 static std::map<std::uint32_t, class Socket*> fd_to_socket;
 
-int insertListen(ip_t remote_ip, ip_t local_ip, port_t remote_port,
-                 port_t local_port, class Socket* request) {
-  auto key = makeKey(remote_ip, local_ip, remote_port, local_port);
+int insertListen(ip_t local_ip, port_t local_port, class Socket* request) {
+  std::pair<std::uint32_t, std::uint16_t> key =
+      std::make_pair(local_ip.s_addr, local_port);
 
   std::scoped_lock lock(kernel_mutex_);
   if (listen_map.find(key) != listen_map.end()) {
@@ -38,13 +39,15 @@ int insertListen(ip_t remote_ip, ip_t local_ip, port_t remote_port,
                        << std::endl;
     return 1;
   }
+
   listen_map.insert(std::make_pair(key, request));
   return 0;
 }
 
 class Socket* findListen(ip_t remote_ip, ip_t local_ip, port_t remote_port,
                          port_t local_port) {
-  auto key = makeKey(remote_ip, local_ip, remote_port, local_port);
+  std::pair<std::uint32_t, std::uint16_t> key =
+      std::make_pair(local_ip.s_addr, local_port);
 
   std::scoped_lock lock(kernel_mutex_);
   auto iter = listen_map.find(key);
@@ -57,13 +60,15 @@ class Socket* findListen(ip_t remote_ip, ip_t local_ip, port_t remote_port,
 
 int deleteListen(ip_t remote_ip, ip_t local_ip, port_t remote_port,
                  port_t local_port) {
-  auto key = makeKey(remote_ip, local_ip, remote_port, local_port);
+  std::pair<std::uint32_t, std::uint16_t> key =
+      std::make_pair(local_ip.s_addr, local_port);
 
   std::scoped_lock lock(kernel_mutex_);
   auto iter = listen_map.find(key);
   if (iter == listen_map.end()) {
     return 1;
   }
+
   listen_map.erase(iter);
   return 0;
 }
@@ -102,7 +107,10 @@ class Socket* findSocket(ip_t remote_ip, ip_t local_ip, port_t remote_port,
     return established_iter->second;
   }
 
-  auto listen_iter = listen_map.find(socket_key);
+  std::pair<std::uint32_t, std::uint16_t> listen_key =
+      std::make_pair(local_ip.s_addr, local_port);
+
+  auto listen_iter = listen_map.find(listen_key);
   if (listen_iter != listen_map.end()) {
     return listen_iter->second;
   }
@@ -125,6 +133,7 @@ std::uint8_t* createTCPPacket(port_t src_port, port_t dest_port,
                               const void* buffer, int len) {
   std::uint8_t* tcp_packet = new std::uint8_t[sizeof(struct tcphdr) + len]();
   auto tcp_header = reinterpret_cast<struct tcphdr*>(tcp_packet);
+
   tcp_header->th_sport = htons(src_port);
   tcp_header->th_dport = htons(dest_port);
 
@@ -179,20 +188,21 @@ int tcpReceiveCallback(const struct ip* ip_header, const void* buffer,
   const std::uint8_t* tcp_payload =
       reinterpret_cast<const std::uint8_t*>(tcp_header + 1);
 
-  port_t remote_port = htons(tcp_header->th_sport);
-  port_t local_port = htons(tcp_header->th_dport);
+  port_t remote_port = ntohs(tcp_header->th_sport);
+  port_t local_port = ntohs(tcp_header->th_dport);
 
-  MINITCP_LOG(DEBUG) << "remote ip = " << inet_ntoa(remote_ip) << std::endl
-                     << "local ip = " << inet_ntoa(local_ip) << std::endl
-                     << "remote port = " << remote_port << std::endl
-                     << "local port = " << local_port << std::endl;
+  // MINITCP_LOG(DEBUG) << "remote ip = " << inet_ntoa(remote_ip) << std::endl
+  //                    << "local ip = " << inet_ntoa(local_ip) << std::endl
+  //                    << "remote port = " << remote_port << std::endl
+  //                    << "local port = " << local_port << std::endl;
 
   class Socket* socket =
       findSocket(remote_ip, local_ip, remote_port, local_port);
 
   if (socket != nullptr) {
-    return socket->ReceiveStateProcess(remote_ip, local_ip, tcp_header, buffer,
-                                       length);
+    return socket->ReceiveStateProcess(remote_ip, local_ip, tcp_header,
+                                       tcp_payload,
+                                       length - sizeof(struct tcphdr));
   }
 
   MINITCP_LOG(ERROR)

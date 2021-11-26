@@ -54,7 +54,6 @@ struct SocketBuffer {
 class SocketBase {
  public:
   SocketBase() : state_(ConnectionState::kClosed) {}
-  // TODO : sensure network endian for dest_port and src_port
   SocketBase(ip_t dest_ip, ip_t src_ip, port_t dest_port, port_t src_port)
       : dest_ip_(dest_ip),
         src_ip_(src_ip),
@@ -91,7 +90,7 @@ class SocketBase {
 class Socket : public SocketBase {
  public:
   // TODO : arbitary bind a local ip and local port.
-  Socket() : SocketBase(ip_t{0}, ip_t{ethernet::getLocalIP()}, 0, 0) {
+  Socket() : SocketBase(ip_t{0}, ip_t{ethernet::getLocalIP()}, 0, 114514) {
     // FIXME : not a good idea to use rand() ?
     send_window_ = 10000;
     recv_window_ = 4096;
@@ -111,8 +110,7 @@ class Socket : public SocketBase {
         send_seq_num_(send_seq_num),
         recv_seq_num_(recv_seq_num) {
     // TODO : add into constant.
-    // TODO : receiver would better use ring buffer.
-    send_window_ = 10000;
+    send_window_ = 15000;
     recv_window_ = 4096;
 
     next_seq_num_ = send_seq_num_;
@@ -128,63 +126,39 @@ class Socket : public SocketBase {
 
   int ReceiveRequest(ip_t remote_ip, ip_t local_ip, struct tcphdr* tcp_header);
   int ReceiveConnection(struct tcphdr* tcp_header);
+  int ReceiveAck(struct tcphdr* tcp_header);
+  int ReceiveData(struct tcphdr* tcp_header, const void* buffer, int length);
   int ReceiveStateProcess(ip_t remote_ip, ip_t local_ip,
                           struct tcphdr* tcp_header, const void* buffer,
                           int length);
 
-  bool AddToListenQueue(class Socket* request) {
-    std::scoped_lock lock(socket_mutex_);
-    if (backlog_count_ >= max_backlog_) {
-      return false;
-    }
-    // backlog_count_++;
-    //  listen_queue_.push_front(request);
-    //  request->lietsn_link_ = listen_queue_.begin();
-    return true;
-  }
-
-  void RemoveFromListenQueue(class Socket* request) {
-    std::scoped_lock lock(socket_mutex_);
-    // backlog_count_--;
-    // listen_queue_.erase(request->listen_link_);
-  }
-
-  void MoveToAcceptQueue(class Socket* request) {
-    std::scoped_lock lock(socket_mutex_);
-    // listen_queue_.erase(request->GetLink());
-    accept_queue_.push_front(request);
-    request->accept_link_ = accept_queue_.begin();
-    socket_cv_.notify_one();
-  }
-
   void AddToAcceptQueue(class Socket* request) {
     std::scoped_lock lock(socket_mutex_);
+    backlog_count_++;
     accept_queue_.push_front(request);
     request->accept_link_ = accept_queue_.begin();
     socket_cv_.notify_one();
   }
 
   class Socket* PopAcceptQueue() {
-    std::scoped_lock lock(socket_mutex_);
-    class Socket* child_socket = accept_queue_.front();
     backlog_count_--;
+    class Socket* child_socket = accept_queue_.front();
     accept_queue_.pop_front();
     return child_socket;
   }
 
   // socket send functions.
-  // send Syn, SynAck or data packets and set up timer for these packets.
   int SendTCPPacketImpl(std::uint8_t flags, const void* buffer, int length);
-  // send Ack/RST flags
   // NOTIMPLEMENTED : piggyback some data when the pending queue is not null.
   int SendTCPPacketPush(std::uint32_t sequence, std::uint32_t ack,
                         std::uint8_t flags, const void* buffer, int length);
 
   // Socket Actions: send and receive
+  class Socket* Accept();
   int Bind(struct sockaddr* address, socklen_t address_len);
   int Listen(int backlog);
-  class Socket* Accept();
   int Connect(struct sockaddr* address, socklen_t address_len);
+
   int Close();
 
  private:
@@ -193,15 +167,17 @@ class Socket : public SocketBase {
   /* TODO : flow control */
 
   // retransmission management
-  void RtxEnqueue(struct SocketBuffer* buffer);
-  struct SocketBuffer* RtxDeque();
+  void RtxEnqueue(struct list_head* node);
+  void RtxDequeue();
+  void RetransmitExtend();
+  int RetransmitShrink(std::uint32_t received_ack);
   void RetransmitCallback();
 
   // send queue management
-  void TxEnqueue(struct SocketBuffer* buffer);
-  void TxDeque();
+  void TxEnqueue(struct list_head* node);
+  void TxDequeue();
 
-  // RAII reference counting.
+  // TODO : RAII reference counting.
   std::atomic<std::uint32_t> ref_cnt_;
 
   // socket mutex
@@ -225,35 +201,23 @@ class Socket : public SocketBase {
   // can only be used in the state of kListen.
   std::list<class Socket*> accept_queue_;
 
-  // for sending and receiving.
-  // std::uint32_t seq_num_;
-  // std::uint32_t ack_num_;
-  // std::uint32_t next_seq_num_;
-
   std::uint32_t send_window_;
   std::uint32_t recv_window_;
-  std::uint32_t send_seq_num_;
+
   std::uint32_t recv_seq_num_;
-  std::uint32_t next_seq_num_;
 
   std::uint32_t send_unack_base_;
   std::uint32_t send_unack_nextseq_;
-
-  // [send_unack_base_, send_unack_nextseq_)
   struct list_head retransmit_queue_ {
     &retransmit_queue_, &retransmit_queue_
   };
-  // [send_seq_num_, next_seq_num_)
+
+  std::uint32_t send_seq_num_;
+  std::uint32_t next_seq_num_;
   struct list_head send_queue_ {
     &send_queue_, &send_queue_
   };
-  // for sampling.
-  std::vector<SocketBuffer*> send_history_;
-
-  // Sender queue
-  // Channel<SocketBuffer> send_queue_;
   // Receiver queue
-  // Channel<SocketBuffer> recv_queue_;
 
   // keepalive timer or Syn Ack retransmission.
   handler_t keepalive_timer_;

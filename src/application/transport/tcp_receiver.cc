@@ -65,9 +65,8 @@ int NetworkCallback(const void *buffer, int length) {
   int status = 0;
   if (network::isLocalIP(ip_header->ip_dst)) {
     if (ip_header->ip_p == kIpProtoTcp) {
-      std::cout << "wow\n";
-      transport::tcpReceiveCallback(ip_header, buffer + sizeof(struct ip),
-                                    length - sizeof(struct ip));
+      length -= sizeof(struct ip);
+      transport::tcpReceiveCallback(ip_header, ip_content, length);
     } else {
       MINITCP_LOG(INFO) << "NetworkCallback: " << inet_ntoa(ip_header->ip_dst)
                         << " receive a message from "
@@ -105,9 +104,7 @@ int main(int argc, char *argv[]) {
 
   class transport::Socket socket;
 
-  // connection_key_t key = transport::makeKey(dest_ip, src_ip, 80, 80, true);
-
-  // insertSocket(key, &socket);
+  insertListen(src_ip, 80, &socket);
 
   // if (!transport::findSocket(key)) {
   //     MINITCP_LOG(ERROR) << " socket is not inserted into the socket map."
@@ -121,9 +118,9 @@ int main(int argc, char *argv[]) {
 
   socket.Listen(10);
 
-  std::this_thread::sleep_for(std::chrono::seconds(30));
+  std::this_thread::sleep_for(std::chrono::seconds(20));
 
-  socket.Accept();
+  auto new_socket = socket.Accept();
 
   MINITCP_LOG(INFO) << "nice boat! " << std::endl;
 

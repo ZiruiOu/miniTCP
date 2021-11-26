@@ -87,15 +87,12 @@ int sendTCPPacket(ip_t src_ip, ip_t dest_ip, port_t src_port, port_t dest_port,
 connection_key_t makeKey(ip_t remote_ip, ip_t local_ip, port_t remote_port,
                          port_t local_port);
 
-[[nodiscard]] int insertListen(ip_t remote_ip, ip_t local_ip,
-                               port_t remote_port, port_t local_port,
-                               class RequestSocket* request);
+[[nodiscard]] int insertListen(ip_t local_ip, port_t local_port,
+                               class Socket* request);
 
-class Socket* findListen(ip_t remote_ip, ip_t local_ip, port_t remote_port,
-                         port_t local_port);
+class Socket* findListen(ip_t local_ip, port_t local_port);
 
-int removeListen(ip_t remote_ip, ip_t local_ip, port_t remote_port,
-                 port_t local_port);
+int removeListen(ip_t local_ip, port_t local_port);
 
 [[nodiscard]] int insertEstablish(ip_t remote_ip, ip_t local_ip,
                                   port_t remote_port, port_t local_port,

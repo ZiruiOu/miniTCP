@@ -8,11 +8,71 @@ namespace minitcp {
 namespace transport {
 
 // WARNING : hold socket lock before calling this function.
-void Socket::RtxEnqueue(struct SocketBuffer* buffer) {
-  int should_setup = !list_empty(&retransmit_queue_);
-  list_insert_after(&buffer->link, retransmit_queue_.prev);
+void Socket::TxEnqueue(struct list_head* node) {
+  list_insert_after(node, send_queue_.prev);
+  RetransmitExtend();
+}
 
-  // if the retransmit queue was empty before, set up the retransmit timer.
+// TODO : optimizations.
+void Socket::RetransmitExtend() {
+  int status = 0;
+  std::uint32_t bytes_in_flight = send_unack_nextseq_ - send_unack_base_;
+
+  struct list_head* node = send_queue_.next;
+  while (node != &send_queue_) {
+    struct SocketBuffer* buffer = container_of(node, struct SocketBuffer, link);
+
+    if (buffer->length + bytes_in_flight < send_window_) {
+      // (1) record sending time.
+      buffer->send_time = std::chrono::high_resolution_clock::now();
+      // (2) send.
+      MINITCP_LOG(INFO) << " send out a packet." << std::endl;
+      status = sendTCPPacket(src_ip_, dest_ip_, src_port_, dest_port_,
+                             buffer->seq, buffer->ack, buffer->flags,
+                             buffer->recv_window, buffer, buffer->length);
+      // (3) add into retransmit queue.
+      struct list_head* tmp = node->next;
+      list_remove(node);
+      RtxEnqueue(node);
+      node = tmp;
+      bytes_in_flight += buffer->length;
+
+    } else {
+      // the window is full, quit.
+      break;
+    }
+  }
+
+  send_unack_nextseq_ = send_unack_base_ + bytes_in_flight;
+}
+
+int Socket::RetransmitShrink(std::uint32_t received_ack) {
+  int status = 0;
+  struct list_head* node = retransmit_queue_.next;
+  while (node != &retransmit_queue_) {
+    struct SocketBuffer* buffer = container_of(node, struct SocketBuffer, link);
+    if (buffer->seq + buffer->length <= received_ack) {
+      status = 0;
+      send_unack_base_ += buffer->length;
+      // TODO : clean up socket buffer.
+      buffer->ack_time = std::chrono::high_resolution_clock::now();
+
+      struct list_head* tmp = node->next;
+      list_remove(node);
+      node = tmp;
+    } else {
+      break;
+    }
+  }
+  return status;
+}
+
+void Socket::RtxEnqueue(struct list_head* node) {
+  int should_setup = list_empty(&retransmit_queue_);
+
+  list_insert_after(node, retransmit_queue_.prev);
+
+  // set up the timer.
   if (should_setup) {
     retransmit_timer_ = new TimerHandler(/*is_persist = */ true);
     std::function<void()> retransmit_wrapper = [this]() {
@@ -26,23 +86,15 @@ void Socket::RtxEnqueue(struct SocketBuffer* buffer) {
 }
 
 // WARNING: hold socket lock before calling this function.
-struct SocketBuffer* Socket::RtxDeque() {
-  if (list_empty(&retransmit_queue_)) {
-    return nullptr;
-  } else {
+void Socket::RtxDequeue() {
+  if (!list_empty(&retransmit_queue_)) {
     struct list_head* head = retransmit_queue_.next;
-    struct SocketBuffer* buffer = container_of(head, struct SocketBuffer, link);
     list_remove(head);
 
-    // TODO : maintain unack_base and unack_seq_num
-
-    // if the retransmit queue become empty, cancell the timer.
     if (list_empty(&retransmit_queue_)) {
       cancellTimer(retransmit_timer_);
       retransmit_timer_ = nullptr;
     }
-
-    return buffer;
   }
 }
 
@@ -54,39 +106,38 @@ void Socket::RetransmitCallback() {
 
   for (node = node->next; node != last; node = node->next) {
     struct SocketBuffer* buffer = container_of(node, struct SocketBuffer, link);
+    // (1) record retransmit time
+    buffer->send_time = std::chrono::high_resolution_clock::now();
+    // (2) resend.
     sendTCPPacket(src_ip_, dest_ip_, src_port_, dest_port_, buffer->seq,
                   buffer->ack, buffer->flags, buffer->recv_window,
                   buffer->buffer, buffer->length);
   }
 }
 
-// Send data with retransmission.
 // WARNING : hold socket lock before calling this function.
 int Socket::SendTCPPacketImpl(std::uint8_t flags, const void* buffer,
                               int length) {
-  int status =
-      sendTCPPacket(src_ip_, dest_ip_, src_port_, dest_port_, send_seq_num_,
-                    recv_seq_num_, flags, recv_window_, buffer, length);
-  if (!status) {
-    struct SocketBuffer* socket_buffer = new struct SocketBuffer;
+  struct SocketBuffer* socket_buffer = new struct SocketBuffer;
 
-    socket_buffer->flags = flags;
-    socket_buffer->seq = send_seq_num_;
-    socket_buffer->ack = recv_seq_num_;
-    socket_buffer->recv_window = recv_window_;
+  socket_buffer->flags = flags;
+  socket_buffer->seq = send_seq_num_;
+  socket_buffer->ack = recv_seq_num_;
+  socket_buffer->recv_window = recv_window_;
 
-    if (buffer) {
-      socket_buffer->buffer = new char[length]();
-      std::memcpy(socket_buffer->buffer, buffer, length);
-    } else {
-      socket_buffer->buffer = 0;
-    }
-    send_unack_nextseq_ += length;
-
-    RtxEnqueue(socket_buffer);
+  if (buffer) {
+    socket_buffer->buffer = new char[length]();
+    std::memcpy(socket_buffer->buffer, buffer, length);
+  } else {
+    socket_buffer->buffer = 0;
   }
 
-  return status;
+  send_seq_num_ += length;
+
+  // add into send queue.
+  TxEnqueue(&socket_buffer->link);
+
+  return 0;
 }
 
 // Send data without retransmission.
@@ -110,50 +161,66 @@ int Socket::ReceiveRequest(ip_t remote_ip, ip_t local_ip,
   // (1) create new request socket.
   port_t remote_port = ntohs(tcp_header->th_sport);
   port_t local_port = ntohs(tcp_header->th_dport);
+
+  std::uint32_t local_seqnum = rand();
+  std::uint32_t remote_seqnum = ntohl(tcp_header->th_seq) + 1;
+
   class Socket* request_socket =
-      new Socket(remote_ip, local_ip, remote_port, local_port, rand(),
-                 ntohl(tcp_header->th_seq));
-  request_socket->state_ = ConnectionState::kSynSent;
+      new Socket(remote_ip, local_ip, remote_port, local_port, local_seqnum,
+                 remote_seqnum);
+
+  request_socket->state_ = ConnectionState::kSynReceived;
 
   // (2) insert this new request socket into my listen_queue_.
   request_socket->listen_socket_ = this;
-
-  // auto key = std::make_pair(remote_ip.s_addr, remote_port);
-  // auto iterator = listen_queue_.insert(std::make_pair(key, request_socket));
-  // request_socket->listen_link_ = iterator;
 
   // (3) insert this new request socket into establish map.
   insertEstablish(remote_ip, local_ip, remote_port, local_port, request_socket);
 
   // (4) send SYNACK and setup timer for this request socket.
-  SendTCPPacketImpl(TH_SYN | TH_ACK, nullptr, 1);
+  request_socket->SendTCPPacketImpl(TH_SYN | TH_ACK, nullptr, 1);
 
   return 0;
 }
 
-// SynAck handler
 // WARNING : hold lock before calling this function.
 int Socket::ReceiveConnection(struct tcphdr* tcp_header) {
-  recv_seq_num_ = ntohl(tcp_header->th_seq);
+  std::uint32_t received_ack = ntohl(tcp_header->th_ack);
+  std::uint32_t received_seqnum = ntohl(tcp_header->th_seq);
 
-  // TODO : SendTCPPacketImpl(TH_ACK, NULL, 0);
-  // (1) send TCP packet.
-  // (2) maintain seq_num_ and next_seq_num_.
-  // (3) setup new timer.
-  struct SocketBuffer* buffer = RtxDeque();
+  recv_seq_num_ = received_seqnum + 1;
 
-  sendTCPPacket(src_ip_, dest_ip_, src_port_, dest_port_, next_seq_num_,
-                recv_seq_num_, TH_ACK, 0, NULL, 0);
-  send_seq_num_ = next_seq_num_;
-  recv_seq_num_ += 1;
-  next_seq_num_ = send_seq_num_ + 1;
-  SendTCPPacketPush(send_seq_num_, recv_seq_num_, TH_ACK, nullptr, 0);
+  int status =
+      SendTCPPacketPush(send_seq_num_, recv_seq_num_, TH_ACK, nullptr, 0);
 
-  state_ = ConnectionState::kEstablished;
-  socket_cv_.notify_one();
+  if (!status) {
+    state_ = ConnectionState::kEstablished;
+    socket_cv_.notify_one();
+  }
+
+  return status;
 }
-// unack_seq_num - unack_next_seq_num - send_seq_num - send_next_seq_num =
-// send_seq_num + length
+
+int Socket::ReceiveData(struct tcphdr* tcp_header, const void* buffer,
+                        int length) {
+  std::uint32_t remote_seqnum = ntohl(tcp_header->th_seq);
+  if (remote_seqnum == recv_seq_num_ && length > 0) {
+    MINITCP_LOG(INFO) << "Receive data : received " << length
+                      << " bytes from remote, which reads "
+                      << reinterpret_cast<const char*>(buffer) << std::endl;
+    recv_seq_num_ += length;
+    SendTCPPacketPush(send_unack_base_, recv_seq_num_, TH_ACK, NULL, 0);
+  }
+}
+
+int Socket::ReceiveAck(struct tcphdr* tcp_header) {
+  int received_ack = ntohl(tcp_header->th_ack);
+  int status = RetransmitShrink(received_ack);
+  if (!status) {
+    RetransmitExtend();
+  }
+  return status;
+}
 
 int Socket::ReceiveStateProcess(ip_t remote_ip, ip_t local_ip,
                                 struct tcphdr* tcp_header, const void* buffer,
@@ -164,37 +231,31 @@ int Socket::ReceiveStateProcess(ip_t remote_ip, ip_t local_ip,
   switch (SocketBase::state_) {
     case ConnectionState::kSynSent:
       if (tcp_header->th_flags == TH_SYN | TH_ACK) {
-        if (ntohl(tcp_header->th_ack) == next_seq_num_) {
+        std::uint32_t received_ack = ntohl(tcp_header->th_ack);
+        status = ReceiveAck(tcp_header);
+        if (!status) {
           status = ReceiveConnection(tcp_header);
         } else {
-          // reset remote socket
-          sendTCPPacket(src_ip_, dest_ip_, src_port_, dest_port_,
-                        ntohl(tcp_header->th_ack), recv_seq_num_ + 1, TH_RST, 0,
-                        NULL, 0);
+          SendTCPPacketPush(received_ack, recv_seq_num_ + 1, TH_RST, NULL, 0);
         }
       }
       break;
     case ConnectionState::kSynReceived:
       if (tcp_header->th_flags == TH_SYN) {
-        // duplicated SYN: drop.
         status = 1;
       } else if (tcp_header->th_flags == TH_ACK) {
-        // accept when the ack number match.
-        if (recv_seq_num_ + 1 == ntohl(tcp_header->th_ack)) {
-          // move to accept queue of the listen queue.
+        status = ReceiveAck(tcp_header);
+        if (!status) {
           if (listen_socket_) {
-            listen_socket_->MoveToAcceptQueue(this);
+            listen_socket_->AddToAcceptQueue(this);
             state_ = ConnectionState::kEstablished;
             status = 0;
-            // TODO : piggyback some data. call
-            // ReceiveProcessData()
           } else {
-            // TODO : clean up.
             status = 1;
           }
         }
       } else if (tcp_header->th_flags == TH_RST) {
-        // FIXME : clean up this request socket.
+        // TODO : clean up this request socket.
         status = 1;
       }
       break;
@@ -208,10 +269,13 @@ int Socket::ReceiveStateProcess(ip_t remote_ip, ip_t local_ip,
     case ConnectionState::kEstablished:
       // may piggyback some data.
       // so you need to process some data.
-      if (tcp_header->th_flags == TH_ACK) {
-        // simple go back-n scheme.
+      if (tcp_header->th_ack) {
+        status = ReceiveAck(tcp_header);
       }
-      // TODO : call ReceiveProcessData() to process the received data.
+      if (!status) {
+        ReceiveData(tcp_header, buffer, length);
+      }
+      break;
     default:
       MINITCP_LOG(ERROR) << "socket ReceiveStateProcess: state not implemented."
                          << std::endl;
@@ -264,18 +328,14 @@ int Socket::Connect(struct sockaddr* address, socklen_t address_len) {
   dest_ip_ = address_in->sin_addr;
   dest_port_ = address_in->sin_port;
 
-  // send SYN datagram.
-  // TODO :
-  int status = sendTCPPacket(src_ip_, dest_ip_, src_port_, dest_port_,
-                             send_seq_num_, 0, TH_SYN, 4096, NULL, 0);
-
-  // TODO : setup retransmission timer.
-
-  state_ = ConnectionState::kSynSent;
+  int status;
+  status = SendTCPPacketImpl(TH_SYN, NULL, 1);
 
   if (status) {
     return status;
   }
+
+  state_ = ConnectionState::kSynSent;
 
   socket_cv_.wait(lock, [this]() {
     return this->state_ == ConnectionState::kEstablished ||

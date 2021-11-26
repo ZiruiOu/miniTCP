@@ -66,8 +66,8 @@ int NetworkCallback(const void *buffer, int length) {
   int status = 0;
   if (network::isLocalIP(ip_header->ip_dst)) {
     if (ip_header->ip_p == kIpProtoTcp) {
-      transport::tcpReceiveCallback(ip_header, buffer + sizeof(struct ip),
-                                    length - sizeof(struct ip));
+      length -= sizeof(struct ip);
+      transport::tcpReceiveCallback(ip_header, ip_content, length);
     } else {
       MINITCP_LOG(INFO) << "NetworkCallback: " << inet_ntoa(ip_header->ip_dst)
                         << " receive a message from "
@@ -105,19 +105,17 @@ int main(int argc, char *argv[]) {
 
   class transport::Socket socket;
 
-  // connection_key_t key = transport::makeKey(dest_ip, src_ip, 80, 80, false);
-
-  // insertSocket(key, &socket);
+  insertEstablish(dest_ip, src_ip, 80, 80, &socket);
 
   address.sin_family = AF_INET;
   address.sin_addr = src_ip;
   address.sin_port = 80;
-  // socket.Bind((struct sockaddr *)&address, sizeof(address));
+  socket.Bind((struct sockaddr *)&address, sizeof(address));
 
   address.sin_addr = dest_ip;
-  std::this_thread::sleep_for(std::chrono::seconds(30));
+  std::this_thread::sleep_for(std::chrono::seconds(20));
 
-  // socket.Connect((struct sockaddr *)&address, sizeof(address));
+  socket.Connect((struct sockaddr *)&address, sizeof(address));
 
   MINITCP_LOG(INFO) << "nice boat!" << std::endl;
 
