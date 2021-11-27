@@ -1,6 +1,10 @@
 #include <arpa/inet.h>
+#include <fcntl.h>
 #include <net/ethernet.h>
 #include <stdio.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
 
 #include <chrono>
 #include <cstdint>
@@ -58,7 +62,7 @@ int LinkCallback(const void *buffer, int length, int device_id) {
 
 int NetworkCallback(const void *buffer, int length) {
   auto ip_header = reinterpret_cast<const struct ip *>(buffer);
-  auto ip_content = (std::uint8_t *)(buffer + sizeof(struct ip));
+  auto ip_content = (std::uint8_t *)(buffer + 20);
 
   // upon receiving an IP packet
   // 1. if it fits a local Ip address, accept it.
@@ -66,7 +70,7 @@ int NetworkCallback(const void *buffer, int length) {
   int status = 0;
   if (network::isLocalIP(ip_header->ip_dst)) {
     if (ip_header->ip_p == kIpProtoTcp) {
-      length -= sizeof(struct ip);
+      length -= 20;
       transport::tcpReceiveCallback(ip_header, ip_content, length);
     } else {
       MINITCP_LOG(INFO) << "NetworkCallback: " << inet_ntoa(ip_header->ip_dst)
@@ -113,11 +117,22 @@ int main(int argc, char *argv[]) {
   socket.Bind((struct sockaddr *)&address, sizeof(address));
 
   address.sin_addr = dest_ip;
+
+  char buffer[1400] = {};
+
+  int fd = open("../hello.txt", O_RDONLY);
+
+  MINITCP_LOG(ERROR) << " open file with fd = " << fd << " errno = " << errno
+                     << std::endl;
+
   std::this_thread::sleep_for(std::chrono::seconds(20));
 
   socket.Connect((struct sockaddr *)&address, sizeof(address));
 
-  MINITCP_LOG(INFO) << "nice boat!" << std::endl;
+  for (int i = 0; i < 27; i++) {
+    read(fd, buffer, sizeof(buffer));
+    socket.Write(buffer, sizeof(buffer));
+  }
 
   while (true)
     ;

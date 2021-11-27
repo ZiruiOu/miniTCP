@@ -57,7 +57,7 @@ int LinkCallback(const void *buffer, int length, int device_id) {
 
 int NetworkCallback(const void *buffer, int length) {
   auto ip_header = reinterpret_cast<const struct ip *>(buffer);
-  auto ip_content = (std::uint8_t *)(buffer + sizeof(struct ip));
+  auto ip_content = (std::uint8_t *)(buffer + 20);
 
   // upon receiving an IP packet
   // 1. if it fits a local Ip address, accept it.
@@ -65,7 +65,7 @@ int NetworkCallback(const void *buffer, int length) {
   int status = 0;
   if (network::isLocalIP(ip_header->ip_dst)) {
     if (ip_header->ip_p == kIpProtoTcp) {
-      length -= sizeof(struct ip);
+      length -= 20;
       transport::tcpReceiveCallback(ip_header, ip_content, length);
     } else {
       MINITCP_LOG(INFO) << "NetworkCallback: " << inet_ntoa(ip_header->ip_dst)
@@ -121,6 +121,9 @@ int main(int argc, char *argv[]) {
   std::this_thread::sleep_for(std::chrono::seconds(20));
 
   auto new_socket = socket.Accept();
+
+  char text[100] = {};
+  new_socket->Read(text, 100);
 
   MINITCP_LOG(INFO) << "nice boat! " << std::endl;
 

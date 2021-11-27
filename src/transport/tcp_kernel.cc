@@ -131,7 +131,11 @@ std::uint8_t* createTCPPacket(port_t src_port, port_t dest_port,
                               std::uint32_t sequence, std::uint32_t ack,
                               std::uint8_t flags, std::uint16_t window,
                               const void* buffer, int len) {
-  std::uint8_t* tcp_packet = new std::uint8_t[sizeof(struct tcphdr) + len]();
+  if (!buffer) {
+    // the length of SYN is 1, however we dont need to copy this bit.
+    len = 0;
+  }
+  std::uint8_t* tcp_packet = new std::uint8_t[20 + len]();
   auto tcp_header = reinterpret_cast<struct tcphdr*>(tcp_packet);
 
   tcp_header->th_sport = htons(src_port);
@@ -140,7 +144,7 @@ std::uint8_t* createTCPPacket(port_t src_port, port_t dest_port,
   tcp_header->th_seq = htonl(sequence);
   tcp_header->th_ack = htonl(ack);
 
-  tcp_header->th_off = 0x05;
+  tcp_header->th_off = 0x5;
   tcp_header->th_flags = flags;
 
   // TODO :  add support for window
@@ -150,7 +154,7 @@ std::uint8_t* createTCPPacket(port_t src_port, port_t dest_port,
   tcp_header->th_urp = 0;
 
   if (buffer) {
-    std::memcpy(tcp_packet + sizeof(*tcp_header), buffer, len);
+    std::memcpy(tcp_packet + 20, buffer, len);
   }
 
   return tcp_packet;
@@ -186,7 +190,7 @@ int tcpReceiveCallback(const struct ip* ip_header, const void* buffer,
       reinterpret_cast<struct tcphdr*>(const_cast<void*>(buffer));
 
   const std::uint8_t* tcp_payload =
-      reinterpret_cast<const std::uint8_t*>(tcp_header + 1);
+      reinterpret_cast<const std::uint8_t*>(buffer + 20);
 
   port_t remote_port = ntohs(tcp_header->th_sport);
   port_t local_port = ntohs(tcp_header->th_dport);
@@ -201,8 +205,7 @@ int tcpReceiveCallback(const struct ip* ip_header, const void* buffer,
 
   if (socket != nullptr) {
     return socket->ReceiveStateProcess(remote_ip, local_ip, tcp_header,
-                                       tcp_payload,
-                                       length - sizeof(struct tcphdr));
+                                       tcp_payload, length - 20);
   }
 
   MINITCP_LOG(ERROR)

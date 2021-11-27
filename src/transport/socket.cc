@@ -26,7 +26,8 @@ void Socket::RetransmitExtend() {
       // (1) record sending time.
       buffer->send_time = std::chrono::high_resolution_clock::now();
       // (2) send.
-      MINITCP_LOG(INFO) << " send out a packet." << std::endl;
+      MINITCP_LOG(INFO) << " retransmit extend : send out a packet."
+                        << std::endl;
       status = sendTCPPacket(src_ip_, dest_ip_, src_port_, dest_port_,
                              buffer->seq, buffer->ack, buffer->flags,
                              buffer->recv_window, buffer, buffer->length);
@@ -58,7 +59,7 @@ int Socket::RetransmitShrink(std::uint32_t received_ack) {
       buffer->ack_time = std::chrono::high_resolution_clock::now();
 
       struct list_head* tmp = node->next;
-      list_remove(node);
+      RtxDequeue();
       node = tmp;
     } else {
       break;
@@ -109,6 +110,9 @@ void Socket::RetransmitCallback() {
     // (1) record retransmit time
     buffer->send_time = std::chrono::high_resolution_clock::now();
     // (2) resend.
+    MINITCP_LOG(INFO) << "retransmit callback : send out a packet."
+                      << "seq = " << buffer->seq << std::endl
+                      << "ack = " << buffer->ack << std::endl;
     sendTCPPacket(src_ip_, dest_ip_, src_port_, dest_port_, buffer->seq,
                   buffer->ack, buffer->flags, buffer->recv_window,
                   buffer->buffer, buffer->length);
@@ -127,9 +131,11 @@ int Socket::SendTCPPacketImpl(std::uint8_t flags, const void* buffer,
 
   if (buffer) {
     socket_buffer->buffer = new char[length]();
+    socket_buffer->length = length;
     std::memcpy(socket_buffer->buffer, buffer, length);
   } else {
     socket_buffer->buffer = 0;
+    socket_buffer->length = length;
   }
 
   send_seq_num_ += length;
@@ -204,12 +210,17 @@ int Socket::ReceiveConnection(struct tcphdr* tcp_header) {
 int Socket::ReceiveData(struct tcphdr* tcp_header, const void* buffer,
                         int length) {
   std::uint32_t remote_seqnum = ntohl(tcp_header->th_seq);
-  if (remote_seqnum == recv_seq_num_ && length > 0) {
-    MINITCP_LOG(INFO) << "Receive data : received " << length
-                      << " bytes from remote, which reads "
-                      << reinterpret_cast<const char*>(buffer) << std::endl;
-    recv_seq_num_ += length;
-    SendTCPPacketPush(send_unack_base_, recv_seq_num_, TH_ACK, NULL, 0);
+  if (length > 0) {
+    if (remote_seqnum >= recv_seq_num_) {
+      MINITCP_LOG(INFO) << "Receive data : received " << length
+                        << " bytes from remote, which reads "
+                        << reinterpret_cast<const char*>(buffer) << std::endl;
+      if (remote_seqnum == recv_seq_num_) {
+        recv_seq_num_ += length;
+      }
+      SendTCPPacketPush(send_seq_num_, recv_seq_num_, TH_ACK, NULL, 0);
+      received_ = true;
+    }
   }
 }
 
@@ -267,14 +278,13 @@ int Socket::ReceiveStateProcess(ip_t remote_ip, ip_t local_ip,
       }
       break;
     case ConnectionState::kEstablished:
-      // may piggyback some data.
-      // so you need to process some data.
       if (tcp_header->th_ack) {
         status = ReceiveAck(tcp_header);
       }
-      if (!status) {
-        ReceiveData(tcp_header, buffer, length);
-      }
+      // if (!status) {
+      //   ReceiveData(tcp_header, buffer, length);
+      // }
+      ReceiveData(tcp_header, buffer, length);
       break;
     default:
       MINITCP_LOG(ERROR) << "socket ReceiveStateProcess: state not implemented."
@@ -343,6 +353,24 @@ int Socket::Connect(struct sockaddr* address, socklen_t address_len) {
   });
 
   return state_ == ConnectionState::kClosed;
+}
+
+int Socket::Read(void* buffer, int length) {
+  std::unique_lock lock(socket_mutex_);
+
+  socket_cv_.wait(lock, [this]() { return this->received_; });
+
+  received_ = false;
+
+  return 0;
+}
+
+int Socket::Write(const void* buffer, int length) {
+  std::scoped_lock lock(socket_mutex_);
+
+  int status = SendTCPPacketImpl(TH_ACK, buffer, length);
+
+  return status;
 }
 
 // ShutDown

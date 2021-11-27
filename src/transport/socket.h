@@ -92,7 +92,7 @@ class Socket : public SocketBase {
   // TODO : arbitary bind a local ip and local port.
   Socket() : SocketBase(ip_t{0}, ip_t{ethernet::getLocalIP()}, 0, 114514) {
     // FIXME : not a good idea to use rand() ?
-    send_window_ = 10000;
+    send_window_ = 5000;
     recv_window_ = 4096;
 
     send_seq_num_ = rand();
@@ -103,14 +103,13 @@ class Socket : public SocketBase {
     recv_seq_num_ = 0;
   }
 
-  // FIXME : only estiblished socket can use.
   Socket(ip_t dest_ip, ip_t src_ip, port_t dest_port, port_t src_port,
          std::uint32_t send_seq_num, std::uint32_t recv_seq_num)
       : SocketBase(dest_ip, src_ip, dest_port, src_port),
         send_seq_num_(send_seq_num),
         recv_seq_num_(recv_seq_num) {
     // TODO : add into constant.
-    send_window_ = 15000;
+    send_window_ = 5000;
     recv_window_ = 4096;
 
     next_seq_num_ = send_seq_num_;
@@ -158,7 +157,8 @@ class Socket : public SocketBase {
   int Bind(struct sockaddr* address, socklen_t address_len);
   int Listen(int backlog);
   int Connect(struct sockaddr* address, socklen_t address_len);
-
+  int Read(void* buffer, int length);
+  int Write(const void* buffer, int length);
   int Close();
 
  private:
@@ -218,6 +218,7 @@ class Socket : public SocketBase {
     &send_queue_, &send_queue_
   };
   // Receiver queue
+  bool received_{false};
 
   // keepalive timer or Syn Ack retransmission.
   handler_t keepalive_timer_;
