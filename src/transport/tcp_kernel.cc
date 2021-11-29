@@ -160,6 +160,11 @@ std::uint8_t* createTCPPacket(port_t src_port, port_t dest_port,
   return tcp_packet;
 }
 
+int calculatePacketBytes(std::uint8_t flags, int length) {
+  bool is_syn_fin = flags & (TH_SYN | TH_FIN);
+  return is_syn_fin + length;
+}
+
 int sendTCPPacket(ip_t src_ip, ip_t dest_ip, port_t src_port, port_t dest_port,
                   std::uint32_t sequence, std::uint32_t ack, std::uint8_t flags,
                   std::uint16_t window, const void* buffer, int len) {

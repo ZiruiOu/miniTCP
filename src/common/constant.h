@@ -9,7 +9,7 @@ namespace minitcp {
 
 // pcap parameters
 // snap len
-const int kPcapSnapLen = 65536;
+const int kPcapSnapLen = 65535;
 // timeout
 const int kPcapTimeout = -1;
 

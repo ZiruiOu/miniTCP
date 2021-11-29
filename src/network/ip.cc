@@ -38,7 +38,7 @@ int sendIPPacketInternal(const ip_t src, const ip_t dest, const void* ip_packet,
                          int ip_length) {
   int status = 0;
 
-  MINITCP_LOG(INFO) << "destination is " << inet_ntoa(dest) << std::endl;
+  // MINITCP_LOG(INFO) << "destination is " << inet_ntoa(dest) << std::endl;
 
   // find the routing table
   auto routing_ip = queryRoutingTable(dest);
@@ -46,20 +46,23 @@ int sendIPPacketInternal(const ip_t src, const ip_t dest, const void* ip_packet,
     // find the arp entry
     auto arp_entry = ethernet::queryArpTable(*routing_ip);
     if (arp_entry) {
-      MINITCP_LOG(INFO) << "A packet is sending from " << inet_ntoa(src)
-                        << " to " << inet_ntoa(arp_entry->dest_ip) << std::endl;
+      // MINITCP_LOG(INFO) << "A packet is sending from " << inet_ntoa(src)
+      //                   << " to " << inet_ntoa(arp_entry->dest_ip) <<
+      //                   std::endl;
       status = ethernet::sendFrame(ip_packet, ip_length, kEtherIPv4Type,
                                    (const void*)&(arp_entry->dest_mac),
                                    arp_entry->local_id);
     } else {
-      MINITCP_LOG(ERROR) << "sendIPPacket : nexthop ip "
-                         << inet_ntoa(*routing_ip)
-                         << " is not found in the routing table. " << std::endl;
+      // MINITCP_LOG(ERROR) << "sendIPPacket : nexthop ip "
+      //                    << inet_ntoa(*routing_ip)
+      //                    << " is not found in the routing table. " <<
+      //                    std::endl;
       status = 1;
     }
   } else {
-    MINITCP_LOG(ERROR) << "sendIPPacket : destination ip " << inet_ntoa(dest)
-                       << " is not found in the routing table. " << std::endl;
+    // MINITCP_LOG(ERROR) << "sendIPPacket : destination ip " << inet_ntoa(dest)
+    //                    << " is not found in the routing table. " <<
+    //                    std::endl;
     status = 1;
   }
 

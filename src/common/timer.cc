@@ -24,7 +24,9 @@ std::optional<handler_t> setTimerAfter(int milliseconds, handler_t handler) {
 
 int cancellTimer(handler_t handler) {
   Timer& timer = Timer::GetInstance();
+  MINITCP_LOG(DEBUG) << "start calcelling timer." << std::endl;
   int status = timer.UnSetTimeout(handler);
+  MINITCP_LOG(DEBUG) << "end of cancelling timer." << std::endl;
   return status;
 }
 

@@ -2,7 +2,7 @@
 #define MINITCP_SRC_TRANSPORT_TCP_KERNEL_H_
 
 #include "../common/types.h"
-#include "socket.h"
+#include "socket_impl.h"
 
 namespace minitcp {
 namespace transport {
@@ -83,6 +83,8 @@ std::uint8_t* createTCPPacket(port_t src_port, port_t dest_port,
 int sendTCPPacket(ip_t src_ip, ip_t dest_ip, port_t src_port, port_t dest_port,
                   std::uint32_t sequence, std::uint32_t ack, std::uint8_t flags,
                   std::uint16_t window, const void* buffer, int len);
+
+int calculatePacketBytes(std::uint8_t flags, int length);
 
 connection_key_t makeKey(ip_t remote_ip, ip_t local_ip, port_t remote_port,
                          port_t local_port);
