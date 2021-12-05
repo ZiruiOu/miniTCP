@@ -14,6 +14,7 @@
 #include "../common/timer_impl.h"
 #include "../common/types.h"
 #include "../ethernet/device.h"
+#include "ringbuffer.h"
 
 namespace minitcp {
 namespace transport {
@@ -102,6 +103,7 @@ class Socket : public SocketBase {
 
     recv_seq_num_ = 0;
 
+    ring_buffer_ = new RingBuffer(65536);
     SetUpTimer();
   }
 
@@ -117,10 +119,12 @@ class Socket : public SocketBase {
     next_seq_num_ = send_seq_num_;
     send_unack_base_ = send_unack_nextseq_ = send_seq_num_;
 
+    ring_buffer_ = new RingBuffer(65536);
+
     CancellTimer();
   }
 
-  ~Socket() = default;
+  ~Socket() { delete ring_buffer_; }
 
   bool IsValid() const override {
     // TODO : check state
@@ -157,12 +161,13 @@ class Socket : public SocketBase {
                         std::uint8_t flags, const void* buffer, int length);
 
   // Socket Actions: send and receive
-  class Socket* Accept();
-  int Bind(struct sockaddr* address, socklen_t address_len);
+  class Socket* Accept(sockaddr* address, socklen_t* address_len);
+  int Bind(const struct sockaddr* address, socklen_t address_len);
   int Listen(int backlog);
-  int Connect(struct sockaddr* address, socklen_t address_len);
-  int Read(void* buffer, int length);
-  int Write(const void* buffer, int length);
+  int Connect(const struct sockaddr* address, socklen_t address_len);
+  int Send(void* buffer, int length);
+  ssize_t Read(void* buffer, std::size_t length);
+  ssize_t Write(const void* buffer, std::size_t length);
   int Close();
 
  private:
@@ -229,8 +234,9 @@ class Socket : public SocketBase {
   struct list_head send_queue_ {
     &send_queue_, &send_queue_
   };
-  // Receiver queue
-  bool received_{false};
+
+  // receive queue
+  class RingBuffer* ring_buffer_;
 
   // keepalive timer or Syn Ack retransmission.
   handler_t keepalive_timer_{nullptr};

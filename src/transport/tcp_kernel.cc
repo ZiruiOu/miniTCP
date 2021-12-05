@@ -118,6 +118,38 @@ class Socket* findSocket(ip_t remote_ip, ip_t local_ip, port_t remote_port,
   return nullptr;
 }
 
+class Socket* findSocketByFd(int fd) {
+  std::scoped_lock lock(kernel_mutex_);
+  auto iterator = fd_to_socket.find(fd);
+  if (iterator != fd_to_socket.end()) {
+    return iterator->second;
+  } else {
+    return nullptr;
+  }
+}
+
+int insertSocketByFd(int fd, class Socket* socket) {
+  std::scoped_lock lock(kernel_mutex_);
+  auto iterator = fd_to_socket.find(fd);
+  if (iterator != fd_to_socket.end()) {
+    return 1;
+  } else {
+    fd_to_socket.insert(std::make_pair(fd, socket));
+    return 0;
+  }
+}
+
+int removeSocketByFd(int fd, class Socket* socket) {
+  std::scoped_lock lock(kernel_mutex_);
+  auto iterator = fd_to_socket.find(fd);
+  if (iterator == fd_to_socket.end()) {
+    return 1;
+  } else {
+    fd_to_socket.erase(iterator);
+    return 0;
+  }
+}
+
 int getNextFd() {
   int fd = open("/dev/null", O_RDONLY);
   return fd;

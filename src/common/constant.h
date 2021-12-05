@@ -53,8 +53,7 @@ const int kRipPoisonThresh = 16;
 const std::uint8_t kIpProtoTcp = 6;
 
 // tcp maximum segment size
-const int kTCPMss =
-    kFramePayloadSize - sizeof(struct ip) - sizeof(struct tcphdr);
+const int kTCPMss = 1460;
 }  // namespace minitcp
 
 #endif  // ! MINITCP_SRC_COMMON_CONSTANT_H_

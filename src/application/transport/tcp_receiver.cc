@@ -32,7 +32,7 @@ int main(int argc, char *argv[]) {
 
   class transport::Socket socket;
 
-  insertEstablish(dest_ip, src_ip, 80, 80, &socket);
+  insertListen(src_ip, 80, &socket);
 
   // if (!transport::findSocket(key)) {
   //     MINITCP_LOG(ERROR) << " socket is not inserted into the socket map."
@@ -46,7 +46,13 @@ int main(int argc, char *argv[]) {
 
   address.sin_addr = dest_ip;
 
-  socket.Connect((struct sockaddr *)&address, sizeof(address));
+  socket.Listen(10);
+
+  struct sockaddr_in accept_address;
+  socklen_t socket_length;
+
+  class transport::Socket *new_socket =
+      socket.Accept((struct sockaddr *)&accept_address, &socket_length);
 
   // std::this_thread::sleep_for(std::chrono::seconds(20));
 
@@ -54,6 +60,18 @@ int main(int argc, char *argv[]) {
 
   // char text[100] = {};
   // new_socket->Read(text, 100);
+
+  MINITCP_LOG(INFO) << "ok : set up " << std::endl;
+
+  char text[1410] = {};
+  for (;;) {
+    MINITCP_LOG(DEBUG) << "start Reading from the established socket."
+                       << std::endl;
+    ssize_t bytes = new_socket->Read(text, 1400);
+    MINITCP_LOG(DEBUG) << "ok : " << std::endl;
+    text[bytes] = 0;
+    std::cout << text << std::endl;
+  }
 
   MINITCP_LOG(INFO) << "nice boat! " << std::endl;
 

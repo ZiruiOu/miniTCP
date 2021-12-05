@@ -16,4 +16,5 @@ target_link_libraries(network
     PRIVATE
         utilities
         ethernet
+        ${PCAP_LIBRARY}
 )

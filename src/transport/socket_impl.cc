@@ -13,7 +13,6 @@ void Socket::TxEnqueue(struct list_head* node) {
   RetransmitExtend();
 }
 
-// TODO : optimizations.
 void Socket::RetransmitExtend() {
   int status = 0;
   std::uint32_t bytes_in_flight = send_unack_nextseq_ - send_unack_base_;
@@ -32,7 +31,7 @@ void Socket::RetransmitExtend() {
       //                  << std::endl;
       status = sendTCPPacket(src_ip_, dest_ip_, src_port_, dest_port_,
                              buffer->seq, buffer->ack, buffer->flags,
-                             buffer->recv_window, buffer, buffer->length);
+                             recv_window_, buffer->buffer, buffer->length);
       // (3) add into retransmit queue.
       struct list_head* tmp = node->next;
       list_remove(node);
@@ -60,12 +59,16 @@ int Socket::RetransmitShrink(std::uint32_t received_ack) {
     if (buffer->seq + length <= received_ack) {
       status = 0;
       send_unack_base_ += length;
-      // TODO : clean up socket buffer.
-      buffer->ack_time = std::chrono::high_resolution_clock::now();
 
       struct list_head* tmp = node->next;
       RtxDequeue();
       node = tmp;
+
+      // if (buffer->buffer) {
+      //   delete[] buffer->buffer;
+      // }
+      // delete buffer;
+
     } else {
       break;
     }
@@ -77,10 +80,6 @@ void Socket::RtxEnqueue(struct list_head* node) {
   int should_setup = list_empty(&retransmit_queue_);
 
   list_insert_after(node, retransmit_queue_.prev);
-
-  // set up the timer.
-  // if (should_setup) {
-  //}
 }
 
 // WARNING: hold socket lock before calling this function.
@@ -88,11 +87,6 @@ void Socket::RtxDequeue() {
   if (!list_empty(&retransmit_queue_)) {
     struct list_head* head = retransmit_queue_.next;
     list_remove(head);
-
-    // if (list_empty(&retransmit_queue_) && retransmit_timer_) {
-    //   cancellTimer(retransmit_timer_);
-    //   retransmit_timer_ = nullptr;
-    // }
   }
 }
 
@@ -120,12 +114,7 @@ void Socket::RetransmitCallback() {
 
   for (node = node->next; node != last; node = node->next) {
     struct SocketBuffer* buffer = container_of(node, struct SocketBuffer, link);
-    // (1) record retransmit time
     buffer->send_time = std::chrono::high_resolution_clock::now();
-    // (2) resend.
-    // MINITCP_LOG(INFO) << "retransmit callback : send out a packet."
-    //                  << "seq = " << buffer->seq << std::endl
-    //                  << "ack = " << buffer->ack << std::endl;
     sendTCPPacket(src_ip_, dest_ip_, src_port_, dest_port_, buffer->seq,
                   buffer->ack, buffer->flags, buffer->recv_window,
                   buffer->buffer, buffer->length);
@@ -146,6 +135,7 @@ int Socket::SendTCPPacketImpl(std::uint8_t flags, const void* buffer,
     socket_buffer->buffer = new char[length]();
     socket_buffer->length = length;
     std::memcpy(socket_buffer->buffer, buffer, length);
+    std::cout << "sending with message " << socket_buffer->buffer << std::endl;
   } else {
     socket_buffer->buffer = 0;
     socket_buffer->length = length;
@@ -224,23 +214,22 @@ int Socket::ReceiveData(struct tcphdr* tcp_header, const void* buffer,
                         int length) {
   std::uint32_t remote_seqnum = ntohl(tcp_header->th_seq);
 
-  length = calculatePacketBytes(tcp_header->th_flags, length);
+  std::uint32_t new_length = calculatePacketBytes(tcp_header->th_flags, length);
 
   bool is_finish = (tcp_header->th_flags == (TH_FIN | TH_ACK));
 
-  if (length > 0) {
+  if (new_length > 0) {
     if (remote_seqnum >= recv_seq_num_) {
-      MINITCP_LOG(INFO) << "Receive data : received " << length
-                        << " bytes from remote, which reads "
-                        << reinterpret_cast<const char*>(buffer) << std::endl;
-      if (remote_seqnum == recv_seq_num_) {
-        recv_seq_num_ += length;
+      if ((!buffer || ring_buffer_->Write((const char*)buffer, length)) &&
+          remote_seqnum == recv_seq_num_) {
+        recv_seq_num_ += new_length;
+        socket_cv_.notify_one();
       }
       SendTCPPacketPush(send_seq_num_, recv_seq_num_, TH_ACK, NULL, 0);
       if (is_finish) {
         ReceiveShutDown();
       }
-      received_ = true;
+      // received_ = true;
     }
   }
 }
@@ -374,7 +363,7 @@ int Socket::ReceiveStateProcess(ip_t remote_ip, ip_t local_ip,
   return status;
 }
 
-int Socket::Bind(struct sockaddr* address, socklen_t address_len) {
+int Socket::Bind(const struct sockaddr* address, socklen_t address_len) {
   if (address->sa_family != AF_INET) {
     MINITCP_LOG(ERROR)
         << " socket.Bind() : fail to bind an socket address which is not "
@@ -383,7 +372,7 @@ int Socket::Bind(struct sockaddr* address, socklen_t address_len) {
     return -1;
   }
 
-  auto address_in = reinterpret_cast<struct sockaddr_in*>(address);
+  auto address_in = reinterpret_cast<const struct sockaddr_in*>(address);
   src_ip_ = address_in->sin_addr;
   src_port_ = address_in->sin_port;
 
@@ -397,7 +386,7 @@ int Socket::Listen(int backlog) {
   return 0;
 }
 
-class Socket* Socket::Accept() {
+class Socket* Socket::Accept(sockaddr* address, socklen_t* address_len) {
   std::unique_lock<std::mutex> lock(socket_mutex_);
 
   // block until accept_queue_ is not empty
@@ -409,10 +398,10 @@ class Socket* Socket::Accept() {
 }
 
 // block or timeout
-int Socket::Connect(struct sockaddr* address, socklen_t address_len) {
+int Socket::Connect(const struct sockaddr* address, socklen_t address_len) {
   std::unique_lock<std::mutex> lock(socket_mutex_);
 
-  auto address_in = reinterpret_cast<struct sockaddr_in*>(address);
+  auto address_in = reinterpret_cast<const struct sockaddr_in*>(address);
 
   dest_ip_ = address_in->sin_addr;
   dest_port_ = address_in->sin_port;
@@ -430,20 +419,28 @@ int Socket::Connect(struct sockaddr* address, socklen_t address_len) {
   return state_ == ConnectionState::kClosed;
 }
 
-int Socket::Read(void* buffer, int length) {
+ssize_t Socket::Read(void* buffer, size_t length) {
   std::unique_lock lock(socket_mutex_);
 
-  socket_cv_.wait(lock, [this]() { return this->received_; });
+  socket_cv_.wait(
+      lock, [this]() { return this->ring_buffer_->GetAvailableBytes() > 0; });
 
-  received_ = false;
-
-  return 0;
+  return ring_buffer_->Read((char*)buffer, length);
 }
 
-int Socket::Write(const void* buffer, int length) {
+ssize_t Socket::Write(const void* buffer, size_t length) {
   std::scoped_lock lock(socket_mutex_);
 
-  int status = SendTCPPacketImpl(TH_ACK, buffer, length);
+  int status = 0;
+  std::size_t start_segment = 0;
+  std::size_t segment_length = 0;
+
+  // a bit tricky : which is not blocked.
+  while (start_segment < length) {
+    segment_length = std::min((std::size_t)kTCPMss, length - start_segment);
+    status |= SendTCPPacketImpl(TH_ACK, buffer + start_segment, segment_length);
+    start_segment += segment_length;
+  }
 
   return status;
 }

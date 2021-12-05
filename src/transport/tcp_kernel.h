@@ -106,6 +106,10 @@ class Socket* findEstablish(ip_t remote_ip, ip_t local_ip, port_t remote_port,
 int removeEstablish(ip_t remote_ip, ip_t local_ip, port_t remote_port,
                     port_t local_port);
 
+class Socket* findSocketByFd(int fd);
+[[nodiscard]] int insertSocketByFd(int fd, class Socket* socket);
+[[nodiscard]] int removeSocketByFd(int fd, class Socket* socket);
+
 /**@brief TCP Packet receive callback.
  *
  * @param [in] ip_header : ip header of the received packet.

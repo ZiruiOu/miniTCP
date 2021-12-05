@@ -13,12 +13,12 @@
 
 #include "constant.h"
 #include "logging.h"
+#include "types.h"
 
 namespace minitcp {
 
 class TimerHandler;
 using handler_t = class TimerHandler*;
-using timestamp_t = std::chrono::time_point<std::chrono::high_resolution_clock>;
 
 class TimerHandler {
  public:

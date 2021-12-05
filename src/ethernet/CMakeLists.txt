@@ -18,4 +18,5 @@ target_include_directories(ethernet
 target_link_libraries(ethernet
     PRIVATE
         utilities
+        ${PCAP_LIBRARY}
 )

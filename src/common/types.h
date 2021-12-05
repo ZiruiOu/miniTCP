@@ -9,10 +9,12 @@
 #include <netinet/tcp.h>
 #include <sys/socket.h>
 
+#include <chrono>
 #include <cstdint>
 #include <utility>
 
 namespace minitcp {
+using timestamp_t = std::chrono::time_point<std::chrono::high_resolution_clock>;
 using mac_t = struct ether_addr;
 using ip_t = struct in_addr;
 using port_t = std::uint16_t;

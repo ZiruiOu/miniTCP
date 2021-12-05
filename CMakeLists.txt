@@ -116,3 +116,25 @@ target_link_libraries(tcp_receiver
         transport
         ${PCAP_LIBRARY}
 )
+
+# link-time interposition for wrapper functions.
+set(INTERPOSITION_FLAG "-Wl")
+set(INTERPOSITION_FLAG "${INTERPOSITION_FLAG},--wrap,socket")
+set(INTERPOSITION_FLAG "${INTERPOSITION_FLAG},--wrap,bind")
+set(INTERPOSITION_FLAG "${INTERPOSITION_FLAG},--wrap,listen")
+set(INTERPOSITION_FLAG "${INTERPOSITION_FLAG},--wrap,connect")
+set(INTERPOSITION_FLAG "${INTERPOSITION_FLAG},--wrap,accept")
+set(INTERPOSITION_FLAG "${INTERPOSITION_FLAG},--wrap,read")
+set(INTERPOSITION_FLAG "${INTERPOSITION_FLAG},--wrap,write")
+set(INTERPOSITION_FLAG "${INTERPOSITION_FLAG},--wrap,close")
+set(INTERPOSITION_FLAG "${INTERPOSITION_FLAG},--wrap,getaddrinfo")
+add_executable(real_send src/application/transport/real_send.c)
+target_link_libraries(real_send
+    PRIVATE
+        utilities
+        ethernet
+        network
+        transport
+        ${PCAP_LIBRARY}
+        ${INTERPOSITION_FLAG}
+)

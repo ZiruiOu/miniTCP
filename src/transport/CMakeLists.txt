@@ -19,5 +19,5 @@ target_link_libraries(transport
         utilities
         ethernet
         network
-        ${PCAP_LIB}
+        ${PCAP_LIBRARY}
 )
