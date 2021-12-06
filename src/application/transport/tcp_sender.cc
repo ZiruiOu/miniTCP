@@ -63,7 +63,7 @@ int main(int argc, char *argv[]) {
   }
   char msg_buffer[20] = "hello how are you?";
   socket.Write(msg_buffer, 20);
-  // socket.Close();
+  socket.Close();
 
   while (true)
     ;

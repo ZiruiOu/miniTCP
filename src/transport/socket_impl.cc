@@ -97,7 +97,7 @@ void Socket::SetUpTimer() {
     this->RetransmitCallback();
     setTimerAfter(1000, this->retransmit_timer_);
   };
-  retransmit_timer_->RegisterCallback(retransmit_wrapper);
+  retransmit_timer_->RegisterCallback(std::move(retransmit_wrapper));
   setTimerAfter(1000, retransmit_timer_);
 }
 
@@ -230,6 +230,8 @@ int Socket::ReceiveData(struct tcphdr* tcp_header, const void* buffer,
         ReceiveShutDown();
       }
       // received_ = true;
+    } else if (is_finish && remote_seqnum == recv_seq_num_ - 1) {
+      SendTCPPacketPush(send_seq_num_, recv_seq_num_, TH_ACK, NULL, 0);
     }
   }
 }
@@ -238,9 +240,24 @@ int Socket::ReceiveAck(struct tcphdr* tcp_header) {
   int received_ack = ntohl(tcp_header->th_ack);
   RetransmitShrink(received_ack);
   RetransmitExtend();
+  if (received_ack == send_seq_num_) {
+    switch (state_) {
+      case ConnectionState::kFinWait1:
+        state_ = ConnectionState::kFinWait2;
+        break;
+      case ConnectionState::kLastAck:
+        state_ = ConnectionState::kClosed;
+        break;
+      default:
+        break;
+    }
+  }
 }
 
 int Socket::ReceiveShutDown() {
+  handler_t timewait_handler;
+  std::function<void()> timewait_wrapper;
+
   switch (state_) {
     case ConnectionState::kEstablished:
       state_ = ConnectionState::kCloseWait;
@@ -248,6 +265,16 @@ int Socket::ReceiveShutDown() {
       break;
     case ConnectionState::kFinWait2:
       state_ = ConnectionState::kTimeWait;
+      timewait_handler = new TimerHandler(false);
+      timewait_wrapper = [this]() {
+        std::scoped_lock lock(this->socket_mutex_);
+        this->state_ = ConnectionState::kClosed;
+        // TODO : clean up this socket.
+        MINITCP_LOG(DEBUG) << "socket turns to state kClosed." << std::endl;
+      };
+      timewait_handler->RegisterCallback(std::move(timewait_wrapper));
+      // wait for 2 MSL time.
+      setTimerAfter(2 * 30000, timewait_handler);
       break;
     default:
       break;
@@ -276,8 +303,10 @@ int Socket::ReceiveStateProcess(ip_t remote_ip, ip_t local_ip,
                                 int length) {
   std::scoped_lock lock(socket_mutex_);
 
-  MINITCP_LOG(INFO) << "entering packet handler with state = "
-                    << static_cast<std::uint32_t>(state_) << std::endl;
+  // MINITCP_LOG(INFO) << "entering packet handler with state = "
+  //                   << static_cast<std::uint32_t>(state_)
+  //                   << " and the next sequence number is " << send_seq_num_
+  //                   << std::endl;
 
   int status = 0;
 
@@ -338,7 +367,7 @@ int Socket::ReceiveStateProcess(ip_t remote_ip, ip_t local_ip,
     case ConnectionState::kCloseWait:
     case ConnectionState::kLastAck:
       if (tcp_header->th_flags & TH_SYN) {
-        MINITCP_LOG(INFO) << "received synack packet " << std::endl;
+        // MINITCP_LOG(INFO) << "received synack packet " << std::endl;
         status = 1;
       } else {
         if (tcp_header->th_flags & TH_ACK) {
@@ -352,7 +381,6 @@ int Socket::ReceiveStateProcess(ip_t remote_ip, ip_t local_ip,
         status = ReceiveAck(tcp_header);
       }
       ReceiveData(tcp_header, buffer, length);
-      // TODO : wait for 2 MSS.
       break;
     default:
       MINITCP_LOG(ERROR) << "socket ReceiveStateProcess: state not implemented."

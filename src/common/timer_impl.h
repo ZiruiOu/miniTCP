@@ -78,6 +78,7 @@ class Timer {
     auto schedule_iter = event_iter->second;
 
     // delete handler_id;
+    delete handler_id;
     schedule_.erase(schedule_iter);
     events_.erase(event_iter);
 

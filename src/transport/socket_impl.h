@@ -120,11 +120,13 @@ class Socket : public SocketBase {
     send_unack_base_ = send_unack_nextseq_ = send_seq_num_;
 
     ring_buffer_ = new RingBuffer(65536);
-
-    CancellTimer();
+    SetUpTimer();
   }
 
-  ~Socket() { delete ring_buffer_; }
+  ~Socket() {
+    delete ring_buffer_;
+    CancellTimer();
+  }
 
   bool IsValid() const override {
     // TODO : check state
@@ -242,6 +244,7 @@ class Socket : public SocketBase {
   handler_t keepalive_timer_{nullptr};
   // retransmit timer
   handler_t retransmit_timer_{nullptr};
+  handler_t timewait_timer_{nullptr};
 };
 }  // namespace transport
 }  // namespace minitcp
