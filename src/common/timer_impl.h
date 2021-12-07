@@ -37,11 +37,7 @@ class TimerHandler {
 
 class Timer {
  public:
-  static class Timer& GetInstance() {
-    static std::once_flag timer_once_flag_;
-    std::call_once(timer_once_flag_, [&]() { timer_singleton_ = new Timer(); });
-    return *timer_singleton_;
-  }
+  static class Timer& GetInstance();
   // no copy and no move
   Timer(const Timer&) = delete;
   Timer& operator=(const Timer&) = delete;

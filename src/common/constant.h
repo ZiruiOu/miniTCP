@@ -56,7 +56,7 @@ const std::uint8_t kIpProtoTcp = 6;
 const int kTCPMss = 1456;
 
 const std::size_t kTCPMinRto = 200;
-const std::size_t kTCPMaxRto = 120000;
+const std::size_t kTCPMaxRto = 4000;
 }  // namespace minitcp
 
 #endif  // ! MINITCP_SRC_COMMON_CONSTANT_H_

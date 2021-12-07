@@ -98,24 +98,6 @@ target_link_libraries(ip
         network
         ${PCAP_LIBRARY}
 )
-add_executable(tcp_sender src/application/transport/tcp_sender.cc)
-target_link_libraries(tcp_sender
-    PRIVATE
-        utilities
-        ethernet
-        network
-        transport
-        ${PCAP_LIBRARY}
-)
-add_executable(tcp_receiver src/application/transport/tcp_receiver.cc)
-target_link_libraries(tcp_receiver
-    PRIVATE
-        utilities
-        ethernet
-        network
-        transport
-        ${PCAP_LIBRARY}
-)
 
 # link-time interposition for wrapper functions.
 set(INTERPOSITION_FLAG "-Wl")
@@ -135,7 +117,37 @@ target_link_libraries(router
         ${INTERPOSITION_FLAG}
 )
 
-# for checkpoint
+#checkpoint 7
+add_executable(tcp_sender src/application/transport/tcp_sender.cc)
+target_link_libraries(tcp_sender
+    PRIVATE
+        transport
+        ${PCAP_LIBRARY}
+        ${INTERPOSITION_FLAG}
+)
+add_executable(tcp_receiver src/application/transport/tcp_receiver.cc)
+target_link_libraries(tcp_receiver
+    PRIVATE
+        transport
+        ${PCAP_LIBRARY}
+        ${INTERPOSITION_FLAG}
+)
+
+#checkpoint 8
+add_executable(broken_send src/application/checkpoint/broken_send.c src/application/checkpoint/unp.c)
+target_link_libraries(broken_send
+    PRIVATE
+        transport
+        ${INTERPOSITION_FLAG}
+)
+add_executable(broken_recv src/application/checkpoint/broken_recv.c src/application/checkpoint/unp.c)
+target_link_libraries(broken_recv
+    PRIVATE
+        transport
+        ${INTERPOSITION_FLAG}
+)
+
+# checkpoint 9
 add_executable(echo_server src/application/checkpoint/echo_server.c src/application/checkpoint/unp.c)
 target_link_libraries(echo_server
     PRIVATE
@@ -148,6 +160,8 @@ target_link_libraries(echo_client
         transport
         ${INTERPOSITION_FLAG}
 )
+
+#checkpoint 10
 add_executable(perf_server src/application/checkpoint/perf_server.c src/application/checkpoint/unp.c)
 target_link_libraries(perf_server
     PRIVATE

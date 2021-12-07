@@ -1,81 +1,36 @@
 #include <arpa/inet.h>
+#include <fcntl.h>
 #include <net/ethernet.h>
 #include <stdio.h>
-
-#include <chrono>
-#include <cstdint>
-#include <cstring>
-#include <iomanip>
-#include <iostream>
-#include <thread>
-
-#include "../common/constant.h"
-#include "../common/logging.h"
-#include "../common/types.h"
-#include "../transport/callbacks.h"
-#include "../transport/socket.h"
-#include "../transport/tcp_kernel.h"
-
-using namespace minitcp;
+#include <string.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
 
 int main(int argc, char *argv[]) {
-  transport::startTCPKernel();
+  char server_ip[] = "10.102.1.2";
 
-  char src_ip_str[] = "10.100.2.1";
-  char dest_ip_str[] = "10.100.1.1";
+  struct sockaddr_in server_addr, client_addr;
+  socklen_t client_addrlen;
 
-  ip_t src_ip, dest_ip;
-  inet_aton(src_ip_str, &src_ip);
-  inet_aton(dest_ip_str, &dest_ip);
+  int listenfd = socket(AF_INET, SOCK_STREAM, 0);
 
-  struct sockaddr_in address;
+  server_addr.sin_family = AF_INET;
+  server_addr.sin_port = htons(4096);
+  inet_pton(AF_INET, server_ip, &server_addr.sin_addr);
+  bind(listenfd, (const sockaddr *)&server_addr, sizeof(server_addr));
 
-  class transport::Socket socket;
+  listen(listenfd, 5);
 
-  insertListen(src_ip, 80, &socket);
+  int acceptfd =
+      accept(listenfd, (struct sockaddr *)&client_addr, &client_addrlen);
 
-  // if (!transport::findSocket(key)) {
-  //     MINITCP_LOG(ERROR) << " socket is not inserted into the socket map."
-  //<< std::endl;
-  //}
+  char message[200] = {};
+  int result = read(acceptfd, message, sizeof(message));
 
-  address.sin_family = AF_INET;
-  address.sin_addr = src_ip;
-  address.sin_port = 80;
-  socket.Bind((struct sockaddr *)&address, sizeof(address));
+  printf("read %d bytes from client, which reads %s\n", result, message);
 
-  address.sin_addr = dest_ip;
-
-  socket.Listen(10);
-
-  struct sockaddr_in accept_address;
-  socklen_t socket_length;
-
-  class transport::Socket *new_socket =
-      socket.Accept((struct sockaddr *)&accept_address, &socket_length);
-
-  // std::this_thread::sleep_for(std::chrono::seconds(20));
-
-  // auto new_socket = socket.Accept();
-
-  // char text[100] = {};
-  // new_socket->Read(text, 100);
-
-  MINITCP_LOG(INFO) << "ok : set up " << std::endl;
-
-  char text[1410] = {};
-  for (;;) {
-    MINITCP_LOG(DEBUG) << "start Reading from the established socket."
-                       << std::endl;
-    ssize_t bytes = new_socket->Read(text, 1400);
-    MINITCP_LOG(DEBUG) << "ok : " << std::endl;
-    text[bytes] = 0;
-    std::cout << text << std::endl;
-  }
-
-  MINITCP_LOG(INFO) << "nice boat! " << std::endl;
-
-  while (true)
-    ;
-  return 0;
+  sleep(5);
+  close(listenfd);
+  close(acceptfd);
 }

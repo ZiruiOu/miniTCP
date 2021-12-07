@@ -131,6 +131,7 @@ class Socket : public SocketBase {
   ~Socket() {
     delete ring_buffer_;
     CancellTimer();
+    CancellKeepalive();
   }
 
   ip_t GetLocalIp() const { return src_ip_; }
@@ -211,6 +212,10 @@ class Socket : public SocketBase {
   void SetUpTimer();
   void CancellTimer();
 
+  // keepalive managment
+  void SetupKeepalive();
+  void CancellKeepalive();
+
   // TODO : RAII reference counting.
   std::atomic<std::uint32_t> ref_cnt_;
 
@@ -256,8 +261,8 @@ class Socket : public SocketBase {
   class RingBuffer* ring_buffer_;
 
   // keepalive timer.
-  int keepalive_retransmision_;
-  timestamp_t last_received_;
+  int keepalive_probe_;         // maximum = 4.
+  timestamp_t keepalive_time_;  // last time receive info from peer.
   handler_t keepalive_timer_{nullptr};
 
   // rto estimator

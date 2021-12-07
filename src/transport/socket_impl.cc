@@ -132,6 +132,37 @@ void Socket::RetransmitCallback() {
   }
 }
 
+void Socket::SetupKeepalive() {
+  MINITCP_LOG(DEBUG) << "SetupKeepalive() : " << std::endl;
+  keepalive_timer_ = new TimerHandler(/*is_persist=*/true);
+  std::function<void()> keepalive_wrapper = [this]() {
+    // keepalive timeout : 5 seconds.
+    std::scoped_lock lock(this->socket_mutex_);
+    timestamp_t expired = keepalive_time_ + std::chrono::milliseconds(10000);
+    timestamp_t current = std::chrono::high_resolution_clock::now();
+    if (expired < current) {
+      keepalive_probe_ = 0;
+      setTimerAfter(10000, this->keepalive_timer_);
+    } else if (keepalive_probe_ < 4) {
+      keepalive_probe_++;
+      setTimerAfter(10000, this->keepalive_timer_);
+    } else {
+      if (this->state_ == ConnectionState::kEstablished) {
+        this->state_ = ConnectionState::kClosed;
+        this->socket_cv_.notify_one();
+      }
+    }
+  };
+  keepalive_timer_->RegisterCallback(std::move(keepalive_wrapper));
+  setTimerAfter(5000, keepalive_timer_);
+}
+
+void Socket::CancellKeepalive() {
+  if (keepalive_timer_) {
+    cancellTimer(keepalive_timer_);
+  }
+}
+
 // WARNING : hold socket lock before calling this function.
 int Socket::SendTCPPacketImpl(std::uint8_t flags, const void* buffer,
                               int length) {
@@ -215,6 +246,7 @@ int Socket::ReceiveConnection(struct tcphdr* tcp_header) {
 
   if (!status) {
     state_ = ConnectionState::kEstablished;
+    SetupKeepalive();
     socket_cv_.notify_one();
   }
 
@@ -327,6 +359,9 @@ int Socket::ReceiveStateProcess(ip_t remote_ip, ip_t local_ip,
   std::uint32_t received_ack = ntohl(tcp_header->th_ack);
   std::uint8_t received_flags = tcp_header->th_flags;
 
+  keepalive_probe_ = 0;
+  keepalive_time_ = std::chrono::high_resolution_clock::now();
+
   switch (SocketBase::state_) {
     case ConnectionState::kSynSent:
       if (received_flags & TH_SYN) {
@@ -356,6 +391,7 @@ int Socket::ReceiveStateProcess(ip_t remote_ip, ip_t local_ip,
             listen_socket_->AddToAcceptQueue(this);
           }
           state_ = ConnectionState::kEstablished;
+          SetupKeepalive();
           socket_cv_.notify_one();
         }
         if (received_flags & TH_SYN) {
@@ -470,11 +506,7 @@ ssize_t Socket::Read(void* buffer, size_t length) {
            (this->state_ == ConnectionState::kClosed);
   });
 
-  if (state_ == ConnectionState::kClosed) {
-    return 0;
-  } else {
-    return ring_buffer_->Read((char*)buffer, length);
-  }
+  return ring_buffer_->Read((char*)buffer, length);
 }
 
 ssize_t Socket::Write(const void* buffer, size_t length) {
@@ -496,7 +528,7 @@ ssize_t Socket::Write(const void* buffer, size_t length) {
       });
     }
     send_buffer_size_ -= segment_length;
-    status |= SendTCPPacketImpl(0, buffer + start_segment, segment_length);
+    status |= SendTCPPacketImpl(TH_ACK, buffer + start_segment, segment_length);
     start_segment += segment_length;
   }
 
@@ -507,7 +539,8 @@ ssize_t Socket::Write(const void* buffer, size_t length) {
 int Socket::Close() {
   std::unique_lock<std::mutex> lock(socket_mutex_);
 
-  if (state_ != ConnectionState::kClosed) {
+  if (state_ != ConnectionState::kClosed &&
+      state_ != ConnectionState::kListen) {
     ShutDown();
     socket_cv_.wait(lock, [this]() {
       return (this->state_ == ConnectionState::kClosed) ||
