@@ -121,7 +121,7 @@ class Timer {
         }
       }
     });
-    timer_worker_.detach();
+    // timer_worker_.detach();
   }
 
   void Stop() {
@@ -130,6 +130,7 @@ class Timer {
       stop_ = true;
     }
     timer_cv_.notify_all();
+    timer_worker_.join();
   }
 
  private:

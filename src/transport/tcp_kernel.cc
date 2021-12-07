@@ -58,12 +58,10 @@ class Socket* findListen(ip_t remote_ip, ip_t local_ip, port_t remote_port,
   }
 }
 
-int deleteListen(ip_t remote_ip, ip_t local_ip, port_t remote_port,
-                 port_t local_port) {
+static inline int removeListenImpl(ip_t local_ip, port_t local_port) {
   std::pair<std::uint32_t, std::uint16_t> key =
       std::make_pair(local_ip.s_addr, local_port);
 
-  std::scoped_lock lock(kernel_mutex_);
   auto iter = listen_map.find(key);
   if (iter == listen_map.end()) {
     return 1;
@@ -71,6 +69,11 @@ int deleteListen(ip_t remote_ip, ip_t local_ip, port_t remote_port,
 
   listen_map.erase(iter);
   return 0;
+}
+
+int removeListen(ip_t local_ip, port_t local_port) {
+  std::scoped_lock lock(kernel_mutex_);
+  return removeListenImpl(local_ip, local_port);
 }
 
 class Socket* findEstablish(ip_t remote_ip, ip_t local_ip, port_t remote_port,
@@ -93,6 +96,23 @@ int insertEstablish(ip_t remote_ip, ip_t local_ip, port_t remote_port,
   std::scoped_lock lock(kernel_mutex_);
   establish_map.insert(std::make_pair(key, socket));
   return 0;
+}
+
+static inline int removeEstablishImpl(ip_t remote_ip, ip_t local_ip,
+                                      port_t remote_port, port_t local_port) {
+  auto key = makeKey(remote_ip, local_ip, remote_port, local_port);
+  auto iter = establish_map.find(key);
+  if (iter == establish_map.end()) {
+    return 1;
+  }
+  establish_map.erase(iter);
+  return 0;
+}
+
+int removeEstablish(ip_t remote_ip, ip_t local_ip, port_t remote_port,
+                    port_t local_port) {
+  std::scoped_lock lock(kernel_mutex_);
+  return removeEstablishImpl(remote_ip, local_ip, remote_port, local_port);
 }
 
 class Socket* findSocket(ip_t remote_ip, ip_t local_ip, port_t remote_port,
@@ -148,6 +168,37 @@ int removeSocketByFd(int fd, class Socket* socket) {
     fd_to_socket.erase(iterator);
     return 0;
   }
+}
+
+int cleanupSocket(int fd) {
+  std::scoped_lock lock(kernel_mutex_);
+  auto iterator = fd_to_socket.find(fd);
+  if (iterator == fd_to_socket.end()) {
+    return 1;
+  } else {
+    class Socket* socket = iterator->second;
+    // clean up socket from fd 2 socket
+    fd_to_socket.erase(iterator);
+    // clean up socket in Establish or Listen
+    if (socket->IsPassive()) {
+      removeListenImpl(socket->GetLocalIp(), socket->GetLocalPort());
+    } else if (socket->IsActive()) {
+      removeEstablishImpl(socket->GetRemoteIp(), socket->GetLocalIp(),
+                          socket->GetRemotePort(), socket->GetLocalPort());
+    }
+  }
+}
+
+static port_t available_port = 32765;
+port_t getFreePort() {
+  port_t next_port;
+  if (available_port < 65535) {
+    next_port = available_port++;
+  } else {
+    available_port = 32765;
+    next_port = available_port++;
+  }
+  return next_port;
 }
 
 int getNextFd() {
@@ -232,11 +283,6 @@ int tcpReceiveCallback(const struct ip* ip_header, const void* buffer,
   port_t remote_port = ntohs(tcp_header->th_sport);
   port_t local_port = ntohs(tcp_header->th_dport);
 
-  // MINITCP_LOG(DEBUG) << "remote ip = " << inet_ntoa(remote_ip) << std::endl
-  //                    << "local ip = " << inet_ntoa(local_ip) << std::endl
-  //                    << "remote port = " << remote_port << std::endl
-  //                    << "local port = " << local_port << std::endl;
-
   class Socket* socket =
       findSocket(remote_ip, local_ip, remote_port, local_port);
 
@@ -245,9 +291,8 @@ int tcpReceiveCallback(const struct ip* ip_header, const void* buffer,
                                        tcp_payload, length - 20);
   }
 
-  MINITCP_LOG(ERROR)
-      << "tcpReceiveCallback : something wrong upon receiving an ACK."
-      << std::endl;
+  MINITCP_LOG(ERROR) << "tcpReceiveCallback : socket not established ! "
+                     << std::endl;
 
   return 0;
 }

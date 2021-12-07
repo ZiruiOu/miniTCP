@@ -13,18 +13,10 @@ EthernetKernel::EthernetKernel() {
   MINITCP_ASSERT(epoll_fd_ != -1)
       << "Ethernet Kernel error: cannot initialize epoll instance."
       << std::endl;
-
-  // register stdin
-  // struct epoll_event event;
-  // event.events = EPOLLIN | EPOLLET;
-  // event.data.fd = kEpollStdinFd;
-  // int status = epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, 0, &event);
-  // MINITCP_ASSERT(status != -1)
-  //    << "Ethernet kernel: "
-  //    << " cannot register stdin into epoll instance. " << std::endl;
 }
 
 EthernetKernel::~EthernetKernel() {
+  stop_ = true;
   for (int i = 0; i < devices.size(); i++) {
     delete devices[i];
   }
@@ -38,18 +30,6 @@ int EthernetKernel::AddDevice(const std::string& device_name) {
       << "Ethernet Kernel: allocate device error" << std::endl;
 
   devices.push_back(new_device);
-
-  int pcap_fd = pcap_get_selectable_fd(new_device->pcap_handler_);
-  MINITCP_ASSERT(pcap_fd != -1)
-      << "Ethernet Kernel: pcap_get_selectable_fd fail. " << std::endl;
-
-  struct epoll_event device_event;
-  device_event.events = EPOLLIN | EPOLLET;
-  device_event.data.fd = device_id;
-  int status = epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, pcap_fd, &device_event);
-  MINITCP_ASSERT(status != -1)
-      << "Ethernet Kernel AddDevice error: cannot register device "
-      << device_name << " into epoll instance." << std::endl;
 
   return device_id;
 }
@@ -68,9 +48,6 @@ int EthernetKernel::AddAllDevices(const std::string& start_with_prefix) {
     if (std::strncmp(netif->name, start_with_prefix.c_str(),
                      start_with_prefix.size()) == 0 &&
         (netif->flags & PCAP_IF_UP)) {
-      // MINITCP_LOG(INFO)
-      //     << "EthernetKernel: adding device " << netif->name <<
-      //     std::endl;
       std::string device_name = std::string(netif->name);
       AddDevice(device_name);
     }
@@ -124,20 +101,20 @@ int EthernetKernel::SetFrameReceiveCallback(frameReceiveCallback callback) {
 }
 
 void EthernetKernel::Start() {
-  std::thread dma_worker = std::thread([this]() {
-    int result;
-    struct pcap_pkthdr* packet_header;
-    const u_char* packet_data;
-    struct epoll_event events[kMaxConcurrentEvents];
+  std::vector<std::thread> workers;
+  for (int i = 0; i < devices.size(); i++) {
+    workers.emplace_back([this, i]() {
+      int result;
+      struct pcap_pkthdr* packet_header;
+      const u_char* packet_data;
 
-    while (true) {
-      int num_ready = epoll_wait(epoll_fd_, events, kMaxConcurrentEvents, -1);
+      auto device_ptr = this->devices[i];
+      pcap_t* device_handler = device_ptr->pcap_handler_;
 
-      for (int i = 0; i < num_ready; i++) {
-        int device_id = events[i].data.fd;
-        auto device_ptr = this->devices[device_id];
-        pcap_t* device_handler = device_ptr->pcap_handler_;
-
+      while (true) {
+        if (stop_) {
+          return;
+        }
         result = pcap_next_ex(device_handler, &packet_header, &packet_data);
         if (packet_data != NULL && result > 0) {
           char* new_data = new char[packet_header->caplen]();
@@ -145,32 +122,22 @@ void EthernetKernel::Start() {
           std::memcpy(new_data, packet_data, new_len);
 
           auto new_buffer = std::shared_ptr<struct EthernetBuffer>(
-              new EthernetBuffer(new_data, new_len, device_id),
+              new EthernetBuffer(new_data, new_len, i),
               [](struct EthernetBuffer* pointer) {
                 delete[] pointer->buffer;
                 delete pointer;
               });
 
-          channel_.push(std::move(new_buffer));
-        }
-      }
-    }
-  });
-  dma_worker.detach();
-
-  std::thread handle_worker = std::thread([this]() {
-    while (true) {
-      while (!channel_.empty()) {
-        auto new_buffer = std::move(channel_.front());
-        channel_.pop();
-        if (kernel_callback_) {
           kernel_callback_(new_buffer.get()->buffer, new_buffer.get()->length,
                            new_buffer.get()->device_id);
         }
       }
-    }
-  });
-  handle_worker.detach();
+    });
+  }
+
+  for (int i = 0; i < workers.size(); i++) {
+    workers[i].detach();
+  }
 }
 
 }  // namespace ethernet

@@ -51,6 +51,8 @@ void Socket::RetransmitExtend() {
 int Socket::RetransmitShrink(std::uint32_t received_ack) {
   int status = 0;
   struct list_head* node = retransmit_queue_.next;
+
+  timestamp_t now = std::chrono::high_resolution_clock::now();
   while (node != &retransmit_queue_) {
     struct SocketBuffer* buffer = container_of(node, struct SocketBuffer, link);
 
@@ -60,14 +62,19 @@ int Socket::RetransmitShrink(std::uint32_t received_ack) {
       status = 0;
       send_unack_base_ += length;
 
+      send_buffer_size_ += length;
+      socket_cv_.notify_one();
+
+      rtt_estimator_.AddSample(buffer->send_time, now);
+
       struct list_head* tmp = node->next;
       RtxDequeue();
       node = tmp;
 
-      // if (buffer->buffer) {
-      //   delete[] buffer->buffer;
-      // }
-      // delete buffer;
+      if (buffer->buffer) {
+        delete[] buffer->buffer;
+      }
+      delete buffer;
 
     } else {
       break;
@@ -95,7 +102,7 @@ void Socket::SetUpTimer() {
   std::function<void()> retransmit_wrapper = [this]() {
     // TODO : add into constant.h
     this->RetransmitCallback();
-    setTimerAfter(1000, this->retransmit_timer_);
+    setTimerAfter(rtt_estimator_.GetTimeoutInterval(), retransmit_timer_);
   };
   retransmit_timer_->RegisterCallback(std::move(retransmit_wrapper));
   setTimerAfter(1000, retransmit_timer_);
@@ -111,6 +118,10 @@ void Socket::RetransmitCallback() {
 
   struct list_head* node = &retransmit_queue_;
   struct list_head* last = &retransmit_queue_;
+
+  if (!list_empty(&retransmit_queue_)) {
+    rtt_estimator_.TimeoutCallback();
+  }
 
   for (node = node->next; node != last; node = node->next) {
     struct SocketBuffer* buffer = container_of(node, struct SocketBuffer, link);
@@ -135,7 +146,6 @@ int Socket::SendTCPPacketImpl(std::uint8_t flags, const void* buffer,
     socket_buffer->buffer = new char[length]();
     socket_buffer->length = length;
     std::memcpy(socket_buffer->buffer, buffer, length);
-    std::cout << "sending with message " << socket_buffer->buffer << std::endl;
   } else {
     socket_buffer->buffer = 0;
     socket_buffer->length = length;
@@ -179,6 +189,7 @@ int Socket::ReceiveRequest(ip_t remote_ip, ip_t local_ip,
                  remote_seqnum);
 
   request_socket->state_ = ConnectionState::kSynReceived;
+  request_socket->socket_state_ = SocketState::kEstablishSocket;
 
   // (2) insert this new request socket into my listen_queue_.
   request_socket->listen_socket_ = this;
@@ -220,10 +231,12 @@ int Socket::ReceiveData(struct tcphdr* tcp_header, const void* buffer,
 
   if (new_length > 0) {
     if (remote_seqnum >= recv_seq_num_) {
-      if ((!buffer || ring_buffer_->Write((const char*)buffer, length)) &&
-          remote_seqnum == recv_seq_num_) {
-        recv_seq_num_ += new_length;
-        socket_cv_.notify_one();
+      if (remote_seqnum == recv_seq_num_) {
+        if ((tcp_header->th_flags & (TH_FIN | TH_SYN)) ||
+            ring_buffer_->Write((const char*)buffer, length)) {
+          recv_seq_num_ += new_length;
+          socket_cv_.notify_one();
+        }
       }
       SendTCPPacketPush(send_seq_num_, recv_seq_num_, TH_ACK, NULL, 0);
       if (is_finish) {
@@ -256,6 +269,7 @@ int Socket::ReceiveAck(struct tcphdr* tcp_header) {
 
 int Socket::ReceiveShutDown() {
   handler_t timewait_handler;
+  std::optional<handler_t> result;
   std::function<void()> timewait_wrapper;
 
   switch (state_) {
@@ -264,17 +278,16 @@ int Socket::ReceiveShutDown() {
       ShutDown();
       break;
     case ConnectionState::kFinWait2:
+      // state_ = ConnectionState::kTimeWait;
+      // timewait_handler = new TimerHandler(false);
+      // timewait_wrapper = [this]() {
+      //   std::scoped_lock lock(this->socket_mutex_);
+      //   this->state_ = ConnectionState::kClosed;
+      //   this->socket_cv_.notify_all();
+      // };
+      // timewait_handler->RegisterCallback(std::move(timewait_wrapper));
+      // result = setTimerAfter(2 * 2000, timewait_handler);
       state_ = ConnectionState::kTimeWait;
-      timewait_handler = new TimerHandler(false);
-      timewait_wrapper = [this]() {
-        std::scoped_lock lock(this->socket_mutex_);
-        this->state_ = ConnectionState::kClosed;
-        // TODO : clean up this socket.
-        MINITCP_LOG(DEBUG) << "socket turns to state kClosed." << std::endl;
-      };
-      timewait_handler->RegisterCallback(std::move(timewait_wrapper));
-      // wait for 2 MSL time.
-      setTimerAfter(2 * 30000, timewait_handler);
       break;
     default:
       break;
@@ -367,7 +380,6 @@ int Socket::ReceiveStateProcess(ip_t remote_ip, ip_t local_ip,
     case ConnectionState::kCloseWait:
     case ConnectionState::kLastAck:
       if (tcp_header->th_flags & TH_SYN) {
-        // MINITCP_LOG(INFO) << "received synack packet " << std::endl;
         status = 1;
       } else {
         if (tcp_header->th_flags & TH_ACK) {
@@ -401,8 +413,10 @@ int Socket::Bind(const struct sockaddr* address, socklen_t address_len) {
   }
 
   auto address_in = reinterpret_cast<const struct sockaddr_in*>(address);
-  src_ip_ = address_in->sin_addr;
-  src_port_ = address_in->sin_port;
+  if (address_in->sin_addr.s_addr != 0) {
+    src_ip_ = address_in->sin_addr;
+  }
+  src_port_ = ntohs(address_in->sin_port);
 
   return 0;
 }
@@ -410,7 +424,8 @@ int Socket::Bind(const struct sockaddr* address, socklen_t address_len) {
 int Socket::Listen(int backlog) {
   // TODO : backlog
   max_backlog_ = 1;
-  SocketBase::SetState(ConnectionState::kListen);
+  state_ = ConnectionState::kListen;
+  socket_state_ = SocketState::kListenSocket;
   return 0;
 }
 
@@ -425,19 +440,19 @@ class Socket* Socket::Accept(sockaddr* address, socklen_t* address_len) {
   return request;
 }
 
-// block or timeout
 int Socket::Connect(const struct sockaddr* address, socklen_t address_len) {
   std::unique_lock<std::mutex> lock(socket_mutex_);
 
   auto address_in = reinterpret_cast<const struct sockaddr_in*>(address);
 
   dest_ip_ = address_in->sin_addr;
-  dest_port_ = address_in->sin_port;
+  dest_port_ = ntohs(address_in->sin_port);
 
   int status;
   status = SendTCPPacketImpl(TH_SYN, NULL, 0);
 
   state_ = ConnectionState::kSynSent;
+  socket_state_ = SocketState::kEstablishSocket;
 
   socket_cv_.wait(lock, [this]() {
     return this->state_ == ConnectionState::kEstablished ||
@@ -450,43 +465,61 @@ int Socket::Connect(const struct sockaddr* address, socklen_t address_len) {
 ssize_t Socket::Read(void* buffer, size_t length) {
   std::unique_lock lock(socket_mutex_);
 
-  socket_cv_.wait(
-      lock, [this]() { return this->ring_buffer_->GetAvailableBytes() > 0; });
+  socket_cv_.wait(lock, [this]() {
+    return (this->ring_buffer_->GetAvailableBytes() > 0) ||
+           (this->state_ == ConnectionState::kClosed);
+  });
 
-  return ring_buffer_->Read((char*)buffer, length);
+  if (state_ == ConnectionState::kClosed) {
+    return 0;
+  } else {
+    return ring_buffer_->Read((char*)buffer, length);
+  }
 }
 
 ssize_t Socket::Write(const void* buffer, size_t length) {
-  std::scoped_lock lock(socket_mutex_);
+  std::unique_lock<std::mutex> lock(socket_mutex_);
+
+  if (state_ == ConnectionState::kClosed) {
+    return 0;
+  }
 
   int status = 0;
   std::size_t start_segment = 0;
   std::size_t segment_length = 0;
 
-  // a bit tricky : which is not blocked.
   while (start_segment < length) {
     segment_length = std::min((std::size_t)kTCPMss, length - start_segment);
-    status |= SendTCPPacketImpl(TH_ACK, buffer + start_segment, segment_length);
+    if (send_buffer_size_ < segment_length) {
+      socket_cv_.wait(lock, [this, segment_length]() {
+        return this->send_buffer_size_ > segment_length;
+      });
+    }
+    send_buffer_size_ -= segment_length;
+    status |= SendTCPPacketImpl(0, buffer + start_segment, segment_length);
     start_segment += segment_length;
   }
 
-  return status;
+  return length;
 }
 
 // ShutDown
 int Socket::Close() {
   std::unique_lock<std::mutex> lock(socket_mutex_);
 
-  // (1) send FIN + ACK, convert to FinWait1
-  // (2) wait until ACK, then back to FinWait2
+  if (state_ != ConnectionState::kClosed) {
+    ShutDown();
+    socket_cv_.wait(lock, [this]() {
+      return (this->state_ == ConnectionState::kClosed) ||
+             (this->state_ == ConnectionState::kTimeWait);
+    });
+    if (this->state_ == ConnectionState::kTimeWait) {
+      socket_cv_.wait_until(lock, std::chrono::high_resolution_clock::now() +
+                                      std::chrono::milliseconds(2 * 10000));
+    }
+    state_ = ConnectionState::kClosed;
+  }
 
-  // (3) receive FIN + ACK, convert to Timewait
-  // (4) send ACK
-
-  ShutDown();
-
-  socket_cv_.wait(
-      lock, [this]() { return this->state_ == ConnectionState::kClosed; });
   return 0;
 }
 

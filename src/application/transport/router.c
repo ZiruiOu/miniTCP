@@ -7,6 +7,11 @@
 
 int main() {
   int fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-  int fd2 = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+
+  close(fd);
+
+  while (1)
+    ;
+
   return 0;
 }

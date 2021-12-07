@@ -42,30 +42,29 @@ class RingBuffer {
   std::size_t Read(char *buffer, std::size_t length) {
     std::size_t bytes = GetAvailableBytes();
     bytes = std::min(bytes, length);
-    if (bytes + read_head_ < size_) {
-      std::memcpy(buffer, buffer_ + read_head_, bytes);
-      read_head_ += bytes;
-    } else {
-      std::memcpy(buffer, buffer_ + read_head_, size_ - read_head_);
-      std::memcpy(buffer + size_ - read_head_, buffer_,
-                  bytes - size_ + read_head_);
-      read_head_ += bytes - size_;
+
+    std::size_t temp = std::min(bytes, size_ - read_head_);
+    std::memcpy(buffer, buffer_ + read_head_, temp);
+    if (bytes > temp) {
+      std::memcpy(buffer + temp, buffer_, bytes - temp);
     }
+    read_head_ = (read_head_ + bytes) % size_;
+    // MINITCP_LOG(DEBUG) << "ringbuffer : read " << bytes
+    //                   << " from this ringbuffer "
+    //                   << " the read_start = " << read_head_ << std::endl
+    //                   << " the read_tail =  " << read_tail_ << std::endl;
     return bytes;
   }
 
   bool Write(const char *buffer, std::size_t length) {
     std::size_t rest_length = GetFreeSpace();
-    if (length <= rest_length) {
-      if (read_tail_ + length < size_) {
-        std::memcpy(buffer_ + read_tail_, buffer, length);
-        read_tail_ += length;
-      } else {
-        std::memcpy(buffer_ + read_tail_, buffer, size_ - read_tail_);
-        std::memcpy(buffer_, buffer + size_ - read_tail_,
-                    length - size_ + read_tail_);
-        read_tail_ += length - size_;
+    if (length < rest_length) {
+      std::size_t temp = std::min(length, size_ - read_tail_);
+      std::memcpy(buffer_ + read_tail_, buffer, temp);
+      if (length > temp) {
+        std::memcpy(buffer_, buffer + temp, length - temp);
       }
+      read_tail_ = (read_tail_ + length) % size_;
       return true;
     }
     return false;

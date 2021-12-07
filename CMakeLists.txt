@@ -128,13 +128,35 @@ set(INTERPOSITION_FLAG "${INTERPOSITION_FLAG},--wrap,read")
 set(INTERPOSITION_FLAG "${INTERPOSITION_FLAG},--wrap,write")
 set(INTERPOSITION_FLAG "${INTERPOSITION_FLAG},--wrap,close")
 set(INTERPOSITION_FLAG "${INTERPOSITION_FLAG},--wrap,getaddrinfo")
-add_executable(real_send src/application/transport/real_send.c)
-target_link_libraries(real_send
+add_executable(router src/application/transport/router.c)
+target_link_libraries(router
     PRIVATE
-        utilities
-        ethernet
-        network
         transport
-        ${PCAP_LIBRARY}
+        ${INTERPOSITION_FLAG}
+)
+
+# for checkpoint
+add_executable(echo_server src/application/checkpoint/echo_server.c src/application/checkpoint/unp.c)
+target_link_libraries(echo_server
+    PRIVATE
+        transport
+        ${INTERPOSITION_FLAG}
+)
+add_executable(echo_client src/application/checkpoint/echo_client.c src/application/checkpoint/unp.c)
+target_link_libraries(echo_client
+    PRIVATE
+        transport
+        ${INTERPOSITION_FLAG}
+)
+add_executable(perf_server src/application/checkpoint/perf_server.c src/application/checkpoint/unp.c)
+target_link_libraries(perf_server
+    PRIVATE
+        transport
+        ${INTERPOSITION_FLAG}
+)
+add_executable(perf_client src/application/checkpoint/perf_client.c src/application/checkpoint/unp.c)
+target_link_libraries(perf_client
+    PRIVATE
+        transport
         ${INTERPOSITION_FLAG}
 )

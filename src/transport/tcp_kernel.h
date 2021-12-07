@@ -110,6 +110,10 @@ class Socket* findSocketByFd(int fd);
 [[nodiscard]] int insertSocketByFd(int fd, class Socket* socket);
 [[nodiscard]] int removeSocketByFd(int fd, class Socket* socket);
 
+int cleanupSocket(int fd);
+
+port_t getFreePort();
+
 /**@brief TCP Packet receive callback.
  *
  * @param [in] ip_header : ip header of the received packet.

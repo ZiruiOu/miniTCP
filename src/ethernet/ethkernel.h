@@ -56,8 +56,8 @@ class EthernetKernel {
   EthernetKernel();
   ~EthernetKernel();
   int epoll_fd_;
+  bool stop_{false};
   std::vector<class EthernetDevice*> devices;
-  std::queue<std::shared_ptr<struct EthernetBuffer>> channel_;
   frameReceiveCallback kernel_callback_{0};
 
   static EthernetKernel* ethernet_singleton_;

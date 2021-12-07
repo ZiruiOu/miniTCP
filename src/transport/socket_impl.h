@@ -15,10 +15,17 @@
 #include "../common/types.h"
 #include "../ethernet/device.h"
 #include "ringbuffer.h"
+#include "rtomanager.h"
 
 namespace minitcp {
 namespace transport {
 class Socket;
+
+enum class SocketState {
+  kCloseSocket,
+  kListenSocket,
+  kEstablishSocket,
+};
 
 enum class ConnectionState {
   kClosed,
@@ -33,6 +40,8 @@ enum class ConnectionState {
   kLastAck,
   kTimeWait,
 };
+
+port_t getFreePort();
 
 struct SocketBuffer {
   char* buffer;
@@ -85,16 +94,16 @@ class SocketBase {
   port_t dest_port_;
   port_t src_port_;
 
+  enum SocketState socket_state_ { SocketState::kCloseSocket };
   enum ConnectionState state_;
 };
 
 class Socket : public SocketBase {
  public:
   // TODO : arbitary bind a local ip and local port.
-  Socket() : SocketBase(ip_t{0}, ip_t{ethernet::getLocalIP()}, 0, 114514) {
+  Socket()
+      : SocketBase(ip_t{0}, ip_t{ethernet::getLocalIP()}, 0, getFreePort()) {
     // FIXME : not a good idea to use rand() ?
-    send_window_ = 5000;
-    recv_window_ = 4096;
 
     send_seq_num_ = rand();
     next_seq_num_ = send_seq_num_;
@@ -103,7 +112,7 @@ class Socket : public SocketBase {
 
     recv_seq_num_ = 0;
 
-    ring_buffer_ = new RingBuffer(65536);
+    ring_buffer_ = new RingBuffer(262144);
     SetUpTimer();
   }
 
@@ -112,20 +121,26 @@ class Socket : public SocketBase {
       : SocketBase(dest_ip, src_ip, dest_port, src_port),
         send_seq_num_(send_seq_num),
         recv_seq_num_(recv_seq_num) {
-    // TODO : add into constant.
-    send_window_ = 5000;
-    recv_window_ = 4096;
-
     next_seq_num_ = send_seq_num_;
     send_unack_base_ = send_unack_nextseq_ = send_seq_num_;
 
-    ring_buffer_ = new RingBuffer(65536);
+    ring_buffer_ = new RingBuffer(262144);
     SetUpTimer();
   }
 
   ~Socket() {
     delete ring_buffer_;
     CancellTimer();
+  }
+
+  ip_t GetLocalIp() const { return src_ip_; }
+  port_t GetLocalPort() const { return src_port_; }
+  ip_t GetRemoteIp() const { return dest_ip_; }
+  port_t GetRemotePort() const { return dest_port_; }
+
+  bool IsPassive() const { return socket_state_ == SocketState::kListenSocket; }
+  bool IsActive() const {
+    return socket_state_ == SocketState::kEstablishSocket;
   }
 
   bool IsValid() const override {
@@ -217,11 +232,11 @@ class Socket : public SocketBase {
   class Socket* listen_socket_{nullptr};
 
   // queue for accept.
-  // can only be used in the state of kListen.
   std::list<class Socket*> accept_queue_;
 
-  std::uint32_t send_window_;
-  std::uint32_t recv_window_;
+  std::size_t send_buffer_size_{8192};
+  std::uint32_t send_window_{8192};
+  std::uint32_t recv_window_{8192};
 
   std::uint32_t recv_seq_num_;
 
@@ -240,10 +255,17 @@ class Socket : public SocketBase {
   // receive queue
   class RingBuffer* ring_buffer_;
 
-  // keepalive timer or Syn Ack retransmission.
+  // keepalive timer.
+  int keepalive_retransmision_;
+  timestamp_t last_received_;
   handler_t keepalive_timer_{nullptr};
+
+  // rto estimator
+  class RttEstimator rtt_estimator_;
   // retransmit timer
   handler_t retransmit_timer_{nullptr};
+
+  // socket timewait timer
   handler_t timewait_timer_{nullptr};
 };
 }  // namespace transport
