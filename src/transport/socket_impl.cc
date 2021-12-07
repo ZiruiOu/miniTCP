@@ -140,10 +140,11 @@ void Socket::SetupKeepalive() {
     std::scoped_lock lock(this->socket_mutex_);
     timestamp_t expired = keepalive_time_ + std::chrono::milliseconds(10000);
     timestamp_t current = std::chrono::high_resolution_clock::now();
-    if (expired < current) {
+    if (current < expired) {
       keepalive_probe_ = 0;
       setTimerAfter(10000, this->keepalive_timer_);
     } else if (keepalive_probe_ < 4) {
+      MINITCP_LOG(DEBUG) << "probe = " << keepalive_probe_ << std::endl;
       keepalive_probe_++;
       setTimerAfter(10000, this->keepalive_timer_);
     } else {
