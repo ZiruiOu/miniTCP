@@ -20,11 +20,10 @@ again:
   while ((n = read(sockfd, buf, MAXLINE)) > 0) {
     writen(sockfd, buf, n);
     acc += n;
-    printf("%zu ", acc);
-    fflush(stdout);
-    sleep(1);
+    // printf("%zu ", acc);
+    // fflush(stdout);
   }
-  printf("all: %zu\n", acc);
+  // printf("all: %zu\n", acc);
   if (n < 0 && errno == EINTR) {
     goto again;
   } else if (n < 0) {

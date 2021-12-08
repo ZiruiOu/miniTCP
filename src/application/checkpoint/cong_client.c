@@ -3,6 +3,8 @@
 // Modified by Chengke on 2021/08/26.
 //
 
+#include <sys/time.h>
+
 #include "unp.h"
 
 const char* message =
@@ -11,6 +13,12 @@ const char* message =
     "Looooooooooooooooooooooooooooooooooooooooooooong\n"
     "what\na\nt\ne\nr\nr\ni\nb\nl\ne\n"
     "\n\n\n";
+
+double timeval_subtract(struct timeval* x, struct timeval* y) {
+  double diff = x->tv_sec - y->tv_sec;
+  diff += (x->tv_usec - y->tv_usec) / 1000000.0;
+  return diff;
+}
 
 #define MSG_LEN 150000
 char message_buf[MSG_LEN];
@@ -32,7 +40,6 @@ void str_cli(FILE* fp, int sockfd, int sleep_) {
   char recvline[MAXLINE];
   while (fgets(sendline, MAXLINE, fp) != NULL) {
     writen(sockfd, sendline, strlen(sendline));
-    sleep(1);
 
     if (readline(sockfd, recvline, MAXLINE) == 0) {
       printf("str_cli: server terminated prematurely\n");
@@ -47,6 +54,7 @@ void cli_client(const char* addr) {
   int sockfd;
   struct sockaddr_in servaddr;
   FILE* fp;
+  struct timeval start_time, end_time;
 
   sockfd = Socket(AF_INET, SOCK_STREAM, 0);
   bzero(&servaddr, sizeof(servaddr));
@@ -56,11 +64,20 @@ void cli_client(const char* addr) {
 
   Connect(sockfd, (struct sockaddr*)&servaddr, sizeof(servaddr));
 
-  for (int i = 0; i < 5; i++) {
+  for (int i = 0; i < 100000; i++) {
     populate_buf();
-
     fp = fmemopen(message_buf, MSG_LEN, "r");
+
+    gettimeofday(&start_time, NULL);
     str_cli(fp, sockfd, i == 0);
+    gettimeofday(&end_time, NULL);
+
+    double time_elapse, rate;
+    time_elapse = timeval_subtract(&end_time, &start_time);
+    rate = MSG_LEN * 1.0 / time_elapse;
+
+    printf("current rate = %.4lf KBps\n", rate / 1000.0);
+
     fclose(fp);
   }
 

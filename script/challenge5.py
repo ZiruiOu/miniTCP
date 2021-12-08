@@ -6,7 +6,7 @@ from utils import install_ns, lauch_terminals_by_scripts, delete_ns
 
 CHALLENGE5_INSTALL_PATH: str = "script/install_topo.sh"
 CHALLENGE5_SCRIPT_PATH: str = "script/enter_ns.sh"
-CHALLENGE5_EXEC_PATHS: List[str] = ["../../../script/exec_router.sh", 
+CHALLENGE5_EXEC_PATHS: List[str] = ["../../../script/exec_cong_router.sh", 
                                     "../../../script/exec_cong_client.sh",
                                     "../../../script/exec_cong_client.sh",
                                     "../../../script/exec_cong_client.sh",
