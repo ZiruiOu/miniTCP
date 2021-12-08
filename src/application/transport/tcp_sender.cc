@@ -20,7 +20,7 @@ int main(int argc, char *argv[]) {
   connect(sockfd, (struct sockaddr *)&server_addr, sizeof(server_addr));
 
   char my_message[100] =
-      "Across the Great Fie Wall we can reach any where in the world!";
+      "Across the Great Fire Wall we can reach any where in the world!";
 
   write(sockfd, my_message, strlen(my_message));
 

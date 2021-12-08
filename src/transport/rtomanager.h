@@ -27,9 +27,6 @@ class RttEstimator {
           0.75 * deviation_rtt_ + 0.25 * std::fabs(delta - estimated_rtt_);
       estimated_rto_ = estimated_rtt_ + 4 * deviation_rtt_;
     }
-    // MINITCP_LOG(DEBUG) << " the sample rtt =  " << delta / 1000.0
-    //                    << " the estimated rtt = " << estimated_rtt_ / 1000.0
-    //                    << std::endl;
   }
 
   void TimeoutCallback() {
