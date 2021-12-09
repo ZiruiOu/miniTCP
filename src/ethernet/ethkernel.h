@@ -45,8 +45,8 @@ class EthernetKernel {
   int AddAllDevices(const std::string& start_with_prefix);
   int FindDevice(const std::string& device_name);
   class EthernetDevice* GetDevicePointer(int id);
-  int SendFrame(const void* buf, int len, int ethtype, const void* destmac,
-                int id);
+  int SendFrame(const void* buf, std::size_t len, int ethtype,
+                const void* destmac, int id);
   int BroadcastArp();
   int SetFrameReceiveCallback(frameReceiveCallback);
   int GetDeviceNumber() const { return devices.size(); }

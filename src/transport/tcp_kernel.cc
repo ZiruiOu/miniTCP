@@ -213,7 +213,7 @@ static std::uint16_t calculateTCPCheckSum() { return 0; }
 std::uint8_t* createTCPPacket(port_t src_port, port_t dest_port,
                               std::uint32_t sequence, std::uint32_t ack,
                               std::uint8_t flags, std::uint16_t window,
-                              const void* buffer, int len) {
+                              const void* buffer, std::size_t len) {
   if (!buffer) {
     // the length of SYN is 1, however we dont need to copy this bit.
     len = 0;
@@ -243,25 +243,25 @@ std::uint8_t* createTCPPacket(port_t src_port, port_t dest_port,
   return tcp_packet;
 }
 
-int calculatePacketBytes(std::uint8_t flags, int length) {
+std::size_t calculatePacketBytes(std::uint8_t flags, std::size_t length) {
   bool is_syn_fin = flags & (TH_SYN | TH_FIN);
   return is_syn_fin + length;
 }
 
 int sendTCPPacket(ip_t src_ip, ip_t dest_ip, port_t src_port, port_t dest_port,
                   std::uint32_t sequence, std::uint32_t ack, std::uint8_t flags,
-                  std::uint16_t window, const void* buffer, int len) {
-  if (len > kTCPMss) {
+                  std::uint16_t window, const void* buffer, std::size_t len) {
+  if (len > 1ul * kTCPMss) {
     MINITCP_LOG(ERROR)
         << "sendTCPPacket : size of the payload is larger than a MSS."
-        << std::endl;
+        << " the sending packet length is " << len << std::endl;
     // TODO : set errno.
     return -1;
   }
   std::uint8_t* packet = createTCPPacket(src_port, dest_port, sequence, ack,
                                          flags, window, buffer, len);
-  int status = network::sendIPPacket(src_ip, dest_ip, kIpProtoTcp, packet,
-                                     sizeof(struct tcphdr) + len);
+  int status =
+      network::sendIPPacket(src_ip, dest_ip, kIpProtoTcp, packet, 20 + len);
   delete[] packet;
   return status;
 }

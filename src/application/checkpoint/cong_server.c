@@ -59,12 +59,8 @@ int main(int argc, char *argv[]) {
   for (loop = 0; loop < 5; loop++) {
     socklen_t clilen = sizeof(cliaddr);
     connfd = Accept(listenfd, (struct sockaddr *)&cliaddr, &clilen);
-
     clientfds[loop] = connfd;
     printf("new connection\n");
-  }
-
-  for (loop = 0; loop < 5; loop++) {
     pthread_create(&worker_threads[loop], NULL, str_echo,
                    (void *)clientfds[loop]);
   }

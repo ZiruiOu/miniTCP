@@ -35,7 +35,7 @@ std::uint16_t calculateCheckSum(const void* header) {
 }
 
 int sendIPPacketInternal(const ip_t src, const ip_t dest, const void* ip_packet,
-                         int ip_length) {
+                         std::size_t ip_length) {
   int status = 0;
 
   // MINITCP_LOG(INFO) << "destination is " << inet_ntoa(dest) << std::endl;
@@ -86,7 +86,7 @@ int sendIPPacketInternal(const ip_t src, const ip_t dest, const void* ip_packet,
  * ip_dst = destination ip address
  */
 int sendIPPacket(const struct in_addr src, const struct in_addr dest, int proto,
-                 const void* buf, int len) {
+                 const void* buf, std::size_t len) {
   // TODO : add constant into ../common/constant.h
   int ip_length = 20 + len;
   auto ip_packet = new std::uint8_t[ip_length]();
@@ -118,7 +118,7 @@ int sendIPPacket(const struct in_addr src, const struct in_addr dest, int proto,
 }
 
 int forwardIPPacket(const struct in_addr src, const struct in_addr dest,
-                    const void* ip_packet, int len) {
+                    const void* ip_packet, std::size_t len) {
   int status = 0;
   auto buffer = new std::uint8_t[len]();
   std::memcpy(buffer, ip_packet, len);

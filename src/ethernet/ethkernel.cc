@@ -76,7 +76,7 @@ class EthernetDevice* EthernetKernel::GetDevicePointer(int id) {
   }
 }
 
-int EthernetKernel::SendFrame(const void* buf, int len, int ethtype,
+int EthernetKernel::SendFrame(const void* buf, std::size_t len, int ethtype,
                               const void* destmac, int id) {
   MINITCP_ASSERT(id >= 0 && id < devices.size())
       << "EthernetKernel Error: device id invalid." << std::endl;

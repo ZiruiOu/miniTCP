@@ -53,7 +53,7 @@ const int kRipPoisonThresh = 16;
 const std::uint8_t kIpProtoTcp = 6;
 
 // tcp maximum segment size
-const int kTCPMss = 1456;
+const int kTCPMss = 1460;
 
 const std::size_t kTCPMinRto = 200;
 const std::size_t kTCPMaxRto = 4000;

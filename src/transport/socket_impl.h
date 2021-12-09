@@ -14,12 +14,12 @@
 #include "../common/timer_impl.h"
 #include "../common/types.h"
 #include "../ethernet/device.h"
+#include "congestion.h"
 #include "ringbuffer.h"
 #include "rtomanager.h"
 
 namespace minitcp {
 namespace transport {
-class Socket;
 
 enum class SocketState {
   kCloseSocket,
@@ -104,15 +104,17 @@ class Socket : public SocketBase {
   Socket()
       : SocketBase(ip_t{0}, ip_t{ethernet::getLocalIP()}, 0, getFreePort()) {
     // FIXME : not a good idea to use rand() ?
-
-    send_seq_num_ = rand();
+    // send_seq_num_ = rand();
+    send_seq_num_ = 0;
     next_seq_num_ = send_seq_num_;
     send_unack_base_ = send_seq_num_;
     send_unack_nextseq_ = send_seq_num_;
 
     recv_seq_num_ = 0;
 
-    ring_buffer_ = new RingBuffer(262144);
+    congestion_ = new class TCPReno(this);
+    ring_buffer_ = new class RingBuffer(262144);
+
     SetUpTimer();
   }
 
@@ -124,12 +126,16 @@ class Socket : public SocketBase {
     next_seq_num_ = send_seq_num_;
     send_unack_base_ = send_unack_nextseq_ = send_seq_num_;
 
-    ring_buffer_ = new RingBuffer(262144);
+    congestion_ = new class TCPReno(this);
+    ring_buffer_ = new class RingBuffer(262144);
+
     SetUpTimer();
   }
 
   ~Socket() {
+    delete congestion_;
     delete ring_buffer_;
+
     CancellTimer();
     CancellKeepalive();
   }
@@ -173,10 +179,19 @@ class Socket : public SocketBase {
   }
 
   // socket send functions.
-  int SendTCPPacketImpl(std::uint8_t flags, const void* buffer, int length);
+  int SendTCPPacketImpl(std::uint8_t flags, const void* buffer,
+                        std::size_t length);
   // NOTIMPLEMENTED : piggyback some data when the pending queue is not null.
   int SendTCPPacketPush(std::uint32_t sequence, std::uint32_t ack,
-                        std::uint8_t flags, const void* buffer, int length);
+                        std::uint8_t flags, const void* buffer,
+                        std::size_t length);
+
+  // congestion control
+  void RetransmitFront();
+  void SetCongestionWindow(std::uint32_t cwnd) {
+    send_window_ = cwnd;
+    RetransmitExtend();
+  }
 
   // Socket Actions: send and receive
   class Socket* Accept(sockaddr* address, socklen_t* address_len);
@@ -240,13 +255,13 @@ class Socket : public SocketBase {
   std::list<class Socket*> accept_queue_;
 
   std::size_t send_buffer_size_{8192};
-  std::uint32_t send_window_{8192};
-  std::uint32_t recv_window_{8192};
+  std::size_t send_window_{1ul * kTCPMss};
+  std::uint16_t recv_window_{8192};
 
   std::uint32_t recv_seq_num_;
 
-  std::uint32_t send_unack_base_;
-  std::uint32_t send_unack_nextseq_;
+  std::size_t send_unack_base_;
+  std::size_t send_unack_nextseq_;
   struct list_head retransmit_queue_ {
     &retransmit_queue_, &retransmit_queue_
   };
@@ -256,6 +271,9 @@ class Socket : public SocketBase {
   struct list_head send_queue_ {
     &send_queue_, &send_queue_
   };
+
+  // congestion control
+  class CCManagerBase* congestion_;
 
   // receive queue
   class RingBuffer* ring_buffer_;

@@ -15,20 +15,27 @@ void Socket::TxEnqueue(struct list_head* node) {
 
 void Socket::RetransmitExtend() {
   int status = 0;
-  std::uint32_t bytes_in_flight = send_unack_nextseq_ - send_unack_base_;
+  std::size_t bytes_in_flight = send_unack_nextseq_ - send_unack_base_;
 
   struct list_head* node = send_queue_.next;
   while (node != &send_queue_) {
     struct SocketBuffer* buffer = container_of(node, struct SocketBuffer, link);
 
-    int length = calculatePacketBytes(buffer->flags, buffer->length);
+    std::size_t length = calculatePacketBytes(buffer->flags, buffer->length);
 
-    if (length + bytes_in_flight < send_window_) {
+    if (length + bytes_in_flight <= send_window_) {
       // (1) record sending time.
       buffer->send_time = std::chrono::high_resolution_clock::now();
       // (2) send.
       // MINITCP_LOG(INFO) << " retransmit extend : send out a packet."
       //                  << std::endl;
+      if (buffer->length > 1456ul) {
+        MINITCP_LOG(ERROR) << "TCP send packet error : " << std::endl
+                           << " packet sequence number = " << buffer->seq
+                           << std::endl
+                           << "packet size = " << buffer->length << std::endl;
+      }
+
       status = sendTCPPacket(src_ip_, dest_ip_, src_port_, dest_port_,
                              buffer->seq, buffer->ack, buffer->flags,
                              recv_window_, buffer->buffer, buffer->length);
@@ -41,6 +48,10 @@ void Socket::RetransmitExtend() {
 
     } else {
       // the window is full, quit.
+      // MINITCP_LOG(INFO) << "Retransmit Extend() : the sending_window = "
+      //                  << send_window_ << std::endl
+      //                  << " the bytes_in_flight = " << bytes_in_flight
+      //                  << " quit. " << std::endl;
       break;
     }
   }
@@ -61,7 +72,6 @@ int Socket::RetransmitShrink(std::uint32_t received_ack) {
     if (buffer->seq + length <= received_ack) {
       status = 0;
       send_unack_base_ += length;
-
       send_buffer_size_ += length;
       socket_cv_.notify_one();
 
@@ -113,27 +123,43 @@ void Socket::CancellTimer() {
   retransmit_timer_ = nullptr;
 }
 
+void Socket::RetransmitFront() {
+  struct list_head* node = &retransmit_queue_;
+  if (!list_empty(node)) {
+    struct SocketBuffer* buffer = container_of(node, struct SocketBuffer, link);
+    buffer->send_time = std::chrono::high_resolution_clock::now();
+    sendTCPPacket(src_ip_, dest_ip_, src_port_, dest_port_, buffer->seq,
+                  buffer->ack, buffer->flags, recv_window_, buffer->buffer,
+                  buffer->length);
+  }
+}
+
 void Socket::RetransmitCallback() {
   std::scoped_lock lock(socket_mutex_);
 
   struct list_head* node = &retransmit_queue_;
   struct list_head* last = &retransmit_queue_;
 
-  if (!list_empty(&retransmit_queue_)) {
-    rtt_estimator_.TimeoutCallback();
-  }
-
+  bool is_syn = false;
   for (node = node->next; node != last; node = node->next) {
     struct SocketBuffer* buffer = container_of(node, struct SocketBuffer, link);
     buffer->send_time = std::chrono::high_resolution_clock::now();
     sendTCPPacket(src_ip_, dest_ip_, src_port_, dest_port_, buffer->seq,
                   buffer->ack, buffer->flags, buffer->recv_window,
                   buffer->buffer, buffer->length);
+    if (buffer->flags & TH_SYN) {
+      is_syn = true;
+    }
+  }
+  if (!list_empty(&retransmit_queue_)) {
+    if (!is_syn) {
+      congestion_->OnTimeout();
+    }
+    rtt_estimator_.TimeoutCallback();
   }
 }
 
 void Socket::SetupKeepalive() {
-  MINITCP_LOG(DEBUG) << "SetupKeepalive() : " << std::endl;
   keepalive_timer_ = new TimerHandler(/*is_persist=*/true);
   std::function<void()> keepalive_wrapper = [this]() {
     // keepalive timeout : 5 seconds.
@@ -166,24 +192,33 @@ void Socket::CancellKeepalive() {
 
 // WARNING : hold socket lock before calling this function.
 int Socket::SendTCPPacketImpl(std::uint8_t flags, const void* buffer,
-                              int length) {
+                              std::size_t length) {
+  if (length > 1456ul) {
+    MINITCP_LOG(ERROR) << "Send TCP Packet Impl :  "
+                       << " packet with sequence number = " << send_seq_num_
+                       << std::endl
+                       << " has length = " << length << std::endl
+                       << " which is larger than a MSS." << std::endl;
+    return 1;
+  }
+
   struct SocketBuffer* socket_buffer = new struct SocketBuffer;
 
   socket_buffer->flags = flags;
   socket_buffer->seq = send_seq_num_;
   socket_buffer->ack = recv_seq_num_;
   socket_buffer->recv_window = recv_window_;
-
   if (buffer) {
     socket_buffer->buffer = new char[length]();
     socket_buffer->length = length;
     std::memcpy(socket_buffer->buffer, buffer, length);
   } else {
     socket_buffer->buffer = 0;
-    socket_buffer->length = length;
+    socket_buffer->length = 0ul;
   }
 
-  send_seq_num_ += calculatePacketBytes(flags, length);
+  send_seq_num_ +=
+      static_cast<std::uint32_t>(calculatePacketBytes(flags, length));
 
   // add into send queue.
   TxEnqueue(&socket_buffer->link);
@@ -195,7 +230,7 @@ int Socket::SendTCPPacketImpl(std::uint8_t flags, const void* buffer,
 // WARNING : hold socket lock before calling this function.
 int Socket::SendTCPPacketPush(std::uint32_t sequence, std::uint32_t ack,
                               std::uint8_t flags, const void* buffer,
-                              int length) {
+                              std::size_t length) {
   int status = sendTCPPacket(src_ip_, dest_ip_, src_port_, dest_port_, sequence,
                              ack, flags, recv_window_, buffer, length);
   return status;
@@ -213,7 +248,8 @@ int Socket::ReceiveRequest(ip_t remote_ip, ip_t local_ip,
   port_t remote_port = ntohs(tcp_header->th_sport);
   port_t local_port = ntohs(tcp_header->th_dport);
 
-  std::uint32_t local_seqnum = rand();
+  // std::uint32_t local_seqnum = rand();
+  std::uint32_t local_seqnum = 0;
   std::uint32_t remote_seqnum = ntohl(tcp_header->th_seq) + 1;
 
   class Socket* request_socket =
@@ -247,7 +283,7 @@ int Socket::ReceiveConnection(struct tcphdr* tcp_header) {
 
   if (!status) {
     state_ = ConnectionState::kEstablished;
-    SetupKeepalive();
+    // SetupKeepalive();
     socket_cv_.notify_one();
   }
 
@@ -284,8 +320,15 @@ int Socket::ReceiveData(struct tcphdr* tcp_header, const void* buffer,
 
 int Socket::ReceiveAck(struct tcphdr* tcp_header) {
   int received_ack = ntohl(tcp_header->th_ack);
+  bool retransmit = congestion_->OnReceiveAck(received_ack);
+
+  if (retransmit) {
+    RetransmitFront();
+  }
+
   RetransmitShrink(received_ack);
   RetransmitExtend();
+
   if (received_ack == send_seq_num_) {
     switch (state_) {
       case ConnectionState::kFinWait1:
@@ -311,15 +354,6 @@ int Socket::ReceiveShutDown() {
       ShutDown();
       break;
     case ConnectionState::kFinWait2:
-      // state_ = ConnectionState::kTimeWait;
-      // timewait_handler = new TimerHandler(false);
-      // timewait_wrapper = [this]() {
-      //   std::scoped_lock lock(this->socket_mutex_);
-      //   this->state_ = ConnectionState::kClosed;
-      //   this->socket_cv_.notify_all();
-      // };
-      // timewait_handler->RegisterCallback(std::move(timewait_wrapper));
-      // result = setTimerAfter(2 * 2000, timewait_handler);
       state_ = ConnectionState::kTimeWait;
       break;
     default:
@@ -341,7 +375,7 @@ void Socket::ShutDown() {
                          << std::endl;
       break;
   }
-  SendTCPPacketImpl(TH_FIN | TH_ACK, nullptr, 0);
+  SendTCPPacketImpl(TH_FIN | TH_ACK, nullptr, 0ul);
 }
 
 int Socket::ReceiveStateProcess(ip_t remote_ip, ip_t local_ip,
@@ -371,13 +405,14 @@ int Socket::ReceiveStateProcess(ip_t remote_ip, ip_t local_ip,
           if (send_seq_num_ == received_ack) {
             status = ReceiveConnection(tcp_header);
           } else {
-            SendTCPPacketPush(received_ack, recv_seq_num_ + 1, TH_RST, NULL, 0);
+            SendTCPPacketPush(received_ack, recv_seq_num_ + 1, TH_RST, NULL,
+                              0ul);
           }
         } else {
           RtxDequeue();
           send_seq_num_ -= 1;
           recv_seq_num_ = remote_seqnum + 1;
-          SendTCPPacketImpl(TH_SYN | TH_ACK, nullptr, 0);
+          SendTCPPacketImpl(TH_SYN | TH_ACK, nullptr, 0ul);
           state_ = ConnectionState::kSynReceived;
         }
       }
@@ -392,7 +427,7 @@ int Socket::ReceiveStateProcess(ip_t remote_ip, ip_t local_ip,
             listen_socket_->AddToAcceptQueue(this);
           }
           state_ = ConnectionState::kEstablished;
-          SetupKeepalive();
+          // SetupKeepalive();
           socket_cv_.notify_one();
         }
         if (received_flags & TH_SYN) {
@@ -486,7 +521,7 @@ int Socket::Connect(const struct sockaddr* address, socklen_t address_len) {
   dest_port_ = ntohs(address_in->sin_port);
 
   int status;
-  status = SendTCPPacketImpl(TH_SYN, NULL, 0);
+  status = SendTCPPacketImpl(TH_SYN, nullptr, 0);
 
   state_ = ConnectionState::kSynSent;
   socket_state_ = SocketState::kEstablishSocket;
@@ -522,14 +557,18 @@ ssize_t Socket::Write(const void* buffer, size_t length) {
   std::size_t segment_length = 0;
 
   while (start_segment < length) {
-    segment_length = std::min((std::size_t)kTCPMss, length - start_segment);
+    segment_length = std::min(1456ul, length - start_segment);
+    // MINITCP_LOG(DEBUG) << "Socket Write : " << std::endl
+    //                    << " segment_length = " << segment_length << std::endl
+    //                    << " start_segment = " << start_segment << std::endl
+    //                    << " length = " << length << std::endl;
     if (send_buffer_size_ < segment_length) {
       socket_cv_.wait(lock, [this, segment_length]() {
         return this->send_buffer_size_ > segment_length;
       });
     }
     send_buffer_size_ -= segment_length;
-    status |= SendTCPPacketImpl(TH_ACK, buffer + start_segment, segment_length);
+    status |= SendTCPPacketImpl(0, buffer + start_segment, segment_length);
     start_segment += segment_length;
   }
 
