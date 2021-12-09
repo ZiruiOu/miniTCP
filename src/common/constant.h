@@ -3,11 +3,13 @@
 
 #include <cstdint>
 
+#include "types.h"
+
 namespace minitcp {
 
 // pcap parameters
 // snap len
-const int kPcapSnapLen = 3000;
+const int kPcapSnapLen = 65535;
 // timeout
 const int kPcapTimeout = -1;
 
@@ -47,8 +49,14 @@ const int kRipPoisonThresh = 16;
 
 // for ip transmission
 
-// for tcp transmission
-const int kMaxSegmentSize = 600;
+// tcp type
+const std::uint8_t kIpProtoTcp = 6;
+
+// tcp maximum segment size
+const int kTCPMss = 1460;
+
+const std::size_t kTCPMinRto = 200;
+const std::size_t kTCPMaxRto = 4000;
 }  // namespace minitcp
 
 #endif  // ! MINITCP_SRC_COMMON_CONSTANT_H_

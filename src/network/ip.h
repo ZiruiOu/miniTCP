@@ -27,7 +27,7 @@ extern "C" {
  * @return 0 on success, -1 on error.
  */
 int sendIPPacket(const struct in_addr src, const struct in_addr dest, int proto,
-                 const void* buf, int len);
+                 const void* buf, std::size_t len);
 
 /**
  * @brief  When receiving a packet from some neighbours, forward the packet to
@@ -39,7 +39,7 @@ int sendIPPacket(const struct in_addr src, const struct in_addr dest, int proto,
  * @return 0 on success, -1 on error.
  */
 int forwardIPPacket(const struct in_addr src, const struct in_addr dest,
-                    const void* ip_packet, int len);
+                    const void* ip_packet, std::size_t len);
 
 /**
  *  @brief Proecss an IP packet upon receiving it.

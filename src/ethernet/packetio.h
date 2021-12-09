@@ -5,6 +5,7 @@
 #define MINITCP_SRC_ETHERNET_PACKETIO_H_
 #include <netinet/ether.h>
 
+#include <cstdint>
 namespace minitcp {
 namespace ethernet {
 
@@ -22,8 +23,8 @@ extern "C" {
  * 0 on success, -1 on error.
  * @see addDevice
  */
-int sendFrame(const void* buf, int len, int ethtype, const void* destmac,
-              int id);
+int sendFrame(const void* buf, std::size_t len, int ethtype,
+              const void* destmac, int id);
 
 /**
  * @brief Process a frame upon receiving it.*

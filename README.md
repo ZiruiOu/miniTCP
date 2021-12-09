@@ -17,6 +17,20 @@ cd ..
 
 
 
+## Code Lists
+
+1. src/application : some application written for self evaluation and checkpoint.
+
+2. src/common: some useful gadgets in implementing the network stack
+
+3. src/ethernet: the code of ethernet layer
+
+4. src/network: the code of network layer
+
+5. src/transport : the code of transport layer
+
+   
+
 ## Part A
 
 ##### Note:
@@ -114,8 +128,6 @@ And the device veth 2-1 will receive this message and use a callback function to
 The result of the checkpoint 2.
 
 ![checkpoint2](./demo/checkpoint2.jpg)
-
-
 
 
 
@@ -510,4 +522,384 @@ send 10.100.1.1 10.100.3.2 HelloWorld!
 The only device (veth4-3) in NS4 can successfully receive the message from NS1as the following picture shows, which proves that our routing table faithfully follows the longest prefix matching rule.
 
 ![checkpoint6-3-ns4](./demo/checkpoint6-3-ns4.png)
+
+
+
+
+
+## Part C
+
+### Usage
+
+To run the program, please first run the following command in the main directory of miniTCP.
+
+
+
+```shell
+mkdir build
+cd build
+sudo cmake ..
+sudo make
+cd ..
+```
+
+
+
+### Writing Task 3 : Describe how you correctly handled TCP state changes.
+
+​	I was planning to implement the TCP state changes by storing socket informations in three kinds of different sockets, namely non-synchronous socket(mainly **SYN Sent**, **SYN Received** and **Listening**) , established (**Established**) socket and time wait socket (mainly **FinWait1, FinWait2, TimeWait, Closing, LastAck, Closed**). However, I finally find out that even though splitting the states into 3 different sets of states would be more clear for programming, it will introduce much more programming work for me.  Finally I choose to implement only **listen socket** and **established socket**, in which the established socket should maintain other TCP state transition except **Listening**.
+
+​	To be more specific, when the user use the socket system call to initialize a socket, the only thing I need to do is to bind the socket with an arbitrary local ip and local port which is not occupied yet, and then I use a map to bind the socket with a system allocated file descriptor. The initial state of this first-created socket will be **Closed**. Whether a socket should be a **listen socket** or a  **established socket** is postpone to the time when the user calls connect() or listen() with the corresponding file descriptor,  the state of the socket will transfer to **SYN Sent** or **Listen** accordingly as well. These two different kinds of socket will be inserted into different hash tables. 
+
+​	When a TCP packet comes and the TCP worker wants to find out the corresponding socket, the worker will first search from the hash table of the established socket, if the worker can find the socket, the worker will process the packet with the handler of the socket. If it cannot find the socket from the established map, which implies that the TCP packet **must** be a SYN packet (the peer wants to connect with us for the first time), we can continue to find our local listen socket in the listen socket hash table.
+
+​	What is **slightly different** from the standard implementation is that the valid state for the **listen socket** would be **Closed** and **Listening** only. The initial state for the listen socket will be **Closed**, when user call listen with the corresponding file descrptor, the state of the socket will be transfer to **Listening**.  After processing and SYN packet from the peer, the listen socket will insert a **new socket** with **SYN Received** state into the established socket map. The listen socket only need to process the **SYN packets** and ignore others. This design is model after **Linux's** and can deal with multiple TCP connection requests by a single listener.
+
+​	As for the established socket, I would like to devide the problem into two parts, namely the 3-way handshake transition and the 4-way handshake transition. The 3-way handshake transition need to deal with the state transition among **SYN sent**, **SYN received** and **Established**. Specifically， my implementation can handle two kinds of connection: (1) the client call connect()  to connect the server (2) both sides call connect() to connect simultaneously.
+
+​	When the user calls connect() with a socket descriptor, the state of the correspoding socket will be changed from **Closed** to **SYN sent** and the socket control block will be inserted into the established socket map. When the listen socket receives this SYN packet sent by connect(), the listen socket will create a new socket, change the state of the new socket to be **SYN received**, send back an SYN ACK packet and insert the new socket into established map. Then the next time when the ACK from the client comes, the TCP worker can directly find the stabled socket from the established map. The TCP worker then checks if the sequence number of the local socket number and the ack number of the ACK packet are matched, if so, the worker will change its status from **SYN received** to **Established**. Otherwise, a RESET packet will be sent back to the client.
+
+​	If a socket with state **SYN Sent** received a **SYN packet** from its peer, which implies that the peer opens the connection by using connect function simultaneously. The local socket will store the iss of the remote, send back an SYN ACK packet and switch to state **SYN Received**. If a socket with state  **SYN Received** receives a SYN ACK packet, the local socket will send back a ACK packet or a RESET, depending on whether the ACK number of the SYN ACK packet matches the sequence number of the local socket or not.
+
+​	What's more, since the SYN packet/ SYN ACK packet might get lost during transmission, we need to set up a **retransmission timer** for the SYN/SYN ACK packet retransmission. The initial timeout interval is set to be 1s, I use the exponential retrieve algorithm to better estimate the initial round trip time.
+
+​	As for the 4-way handshake state transition, I only implement the simple case, in which only the client will call close() to close the socket. I need to implement following state transition in order to support the one-sided 4-way handshake.
+
+​	（1）When the user is trying to use the function close() to close the socket, the socket will change its state to **FinWait1** and send a FIN ACK message to the peer socket.
+
+​      (2)   When a **Established** socket receives a FIN ACK message, the socket will sends back an ACK accordingly and change its own state to **CloseWait**.
+
+​      (3)    When a socket with state **FinWait1** receives a ACK from remote and the ack number matches its local sequence number, this socket change to state **FinWait2**.
+
+​      (4)    After transferring all the packet to the remote, a socket with state **CloseWait** will send a FIN ACK packet to the peer and turn to state **LastAck**.
+
+​      (5)    When a socket with state **FinWait2** receives a FIN ACK and the sequence number matches, this socket turns to state **TimeWait**, sends back an ACk accordingly and wait for 2 maximum segment time (I choose the MSL=10 seconds in my own implementation, since a standard MSL might be too long for evaluation). If this receives duplicated FIN ACK, it will reply a ACK and set up the timewait timer again. If no duplicated FIN ACK is received within 2 MSL, the socket will then turn to state **Closed**.
+
+​	  (6)    When a socket with state **LastAck** receives a ACk which is matched, the socket will immediately turn to state **Closed**.
+
+​	One thing you need to notice is that, since it is likely that the client may exit without using close() function to nitify the server, the keepalive timer is required in my implementation (you may find it useful in checkpoint10). The keepalive will be called every 5 seconds, if it find out the corresponding socket hasn't received any data from the remote socket, it will continue to probe in the next 5 rounds, if there is still no reply from the remote, the timer will direectly turn the state of the socket to **Closed**.
+
+
+
+### Checkpoint 7
+
+#### 1. Topology
+
+​	 In checkpoint7, two Linux nss, namely ns1 and ns2, will connect with each other, the nic in ns1 (veth1-2) is configured with 10.102.1.1 and the nic in ns2 (veth2-1) is configured with 10.102.1.2.
+
+#### 2. Usage 
+
+To check out checkpoint7, please execute the following command in the directory of miniTCP in the terminal.
+
+```shell
+python3 script/check7.py -install
+```
+
+
+
+After checking out the checkpoint9, please execute the following command to delete the configuration generated by vnetUtils.
+
+```shell
+python3 script/check7.py -delete
+```
+
+
+
+In order to capture packets from the network with network number NS (1 or 2), please execute the following command in the miniTCP directory **instead of the build directory**.
+
+```shell
+bash script/capture_ns.sh NS
+```
+
+
+
+#### 3. Result
+
+​	In this process, the client in ns1 will open the socket and send a piece message to the server in ns1 and close.
+
+​	9 TCP packets are captured in the whole process.
+
+![check7-1](./demo/check7-1.png)
+
+​	The first 2 bytes are 7f fd, which means the TCP source port number (in big endian) is 32765.
+
+​    The next 2 bytes are 10, 00, which stands for the TCP destination port number (in big endian) is 4096.
+
+​	The next 4 bytes are 6b 8b 45 67, which stands for the sequence number of this TCP packet (in big endian) is 0x67458b6b.
+
+​	The next 4 bytes are 00 00 00 00, which stands for the ack number  (in big endian) is 0x0.
+
+​	The next 1 byte is 50, which stands for the header length is 20 bytes.
+
+​	The next 1 byte is 0x02, which stands for the TCP control flags, and this is a SYN packet.
+
+​	The next 2 bytes are 10, 00, which stands for the sender receiving window size (in big endian) is 4096.
+
+​	The next 4 bytes are 00, 00, 00, 00, which stands for the TCP packet checksum (in big endian).
+
+
+
+![check7-2](./demo/check7-2.png)
+
+​	The first 2 bytes are 10, 00, which means the TCP source port number (in big endian) is 4096.
+
+​    The next 2 bytes are 7f, fd, which stands for the TCP destination port number (in big endian) is 32765.
+
+​	The next 4 bytes are 32, 7b, 23, c6, which stands for the sequence number of this TCP packet (in big endian).
+
+​	The next 4 bytes are 23 c6 6b 8b, which stands for the ack number of this TCP packet (in big endian).
+
+​	The next 1 byte is 50, which stands for the header length is 20 bytes.
+
+​	The next 1 byte is 0x12, which stands for the TCP control flags, and this is a SYN ACK packet.
+
+​	The next 2 bytes are 10, 00, which stands for the sender receiving window size (in big endian) is 4096.
+
+​	The next 4 bytes are 00, 00, 00, 00, which stands for the TCP packet checksum (in big endian).
+
+
+
+![check7-3](./demo/check7-3.png)
+
+​	The first 2 bytes are 7f, fd, which means the TCP source port number (in big endian).
+
+​    The next 2 bytes are 10, 00 which stands for the TCP destination port number (in big endian).
+
+​	The next 4 bytes are 6b, 8b, 45, 68, which stands for the sequence number of this TCP packet (in big endian).
+
+​	The next 4 bytes are 32, 7b, 23, c7, which stands for the ack number of this TCP packet (in big endian).
+
+​	The next 1 byte is 50, which stands for the header length is 20 bytes.
+
+​	The next 1 byte is 0x10, which stands for the TCP control flags, and this is a ACK packet.
+
+​	The next 2 bytes are 10, 00, which stands for the sender receiving window size (in big endian) is 4096.
+
+​	The next 4 bytes are 00, 00, 00, 00, which stands for the TCP packet checksum (in big endian).
+
+
+
+![check7-4](./demo/check7-4.png)
+
+​	The first 2 bytes are 7f, fd, which means the TCP source port number (in big endian).
+
+​    The next 2 bytes are 10, 00 which stands for the TCP destination port number (in big endian).
+
+​	The next 4 bytes are 6b, 8b, 45, 68, which stands for the sequence number of this TCP packet (in big endian).
+
+​	The next 4 bytes are 32, 7b, 23, c7, which stands for the ack number of this TCP packet (in big endian).
+
+​	The next 1 byte is 50, which stands for the header length is 20 bytes.
+
+​	The next 1 byte is 0x10, which stands for the TCP control flags, and this is a ACK packet.
+
+​	The next 2 bytes are 10, 00, which stands for the sender receiving window size (in big endian) is 4096.
+
+​	The next 4 bytes are 00, 00, 00, 00, which stands for the TCP packet checksum (in big endian).
+
+
+
+![check7-5](./demo/check7-5.png)
+
+​	The first 2 bytes are 7f, fd, which means the TCP source port number (in big endian).
+
+​    The next 2 bytes are 10, 00 which stands for the TCP destination port number (in big endian).
+
+​	The next 4 bytes are 6b, 8b, 45, a7, which stands for the sequence number of this TCP packet (in big endian).
+
+​	The next 4 bytes are 32, 7b, 23, c7, which stands for the ack number of this TCP packet (in big endian).
+
+​	The next 1 byte is 50, which stands for the header length is 20 bytes.
+
+​	The next 1 byte is 0x11, which stands for the TCP control flags, and this is a FIN ACK packet.
+
+​	The next 2 bytes are 10, 00, which stands for the sender receiving window size (in big endian) is 4096.
+
+​	The next 4 bytes are 00, 00, 00, 00, which stands for the TCP packet checksum (in big endian).
+
+
+
+![check7-6](./demo/check7-6.png)
+
+​	The first 2 bytes are 10, 00, which means the TCP source port number (in big endian).
+
+​    The next 2 bytes are 7f, fd which stands for the TCP destination port number (in big endian).
+
+​	The next 4 bytes are 32, 7b, 23, c7, which stands for the sequence number of this TCP packet (in big endian).
+
+​	The next 4 bytes are 6b, 8b, 45, a7, which stands for the ack number of this TCP packet (in big endian).
+
+​	The next 1 byte is 50, which stands for the header length is 20 bytes.
+
+​	The next 1 byte is 0x10, which stands for the TCP control flags, and this is a ACK packet.
+
+​	The next 2 bytes are 10, 00, which stands for the sender receiving window size (in big endian) is 4096.
+
+​	The next 4 bytes are 00, 00, 00, 00, which stands for the TCP packet checksum (in big endian).
+
+
+
+![check7-7](./demo/check7-7.png)
+
+​	The first 2 bytes are 10, 00, which means the TCP source port number (in big endian).
+
+​    The next 2 bytes are 7f, fd which stands for the TCP destination port number (in big endian).
+
+​	The next 4 bytes are 32, 7b, 23, c7 which stands for the sequence number of this TCP packet (in big endian).
+
+​	The next 4 bytes are 6b, 8b, 45,a8 which stands for the ack number of this TCP packet (in big endian).
+
+​	The next 1 byte is 50, which stands for the header length is 20 bytes.
+
+​	The next 1 byte is 0x10, which stands for the TCP control flags, and this is a ACK packet.
+
+​	The next 2 bytes are 10, 00, which stands for the sender receiving window size (in big endian) is 4096.
+
+​	The next 4 bytes are 00, 00, 00, 00, which stands for the TCP packet checksum (in big endian).
+
+![check7-8](./demo/check7-8.png)
+
+​	The first 2 bytes are 10, 00, which means the TCP source port number (in big endian).
+
+​    The next 2 bytes are 7f, fd which stands for the TCP destination port number (in big endian).
+
+​	The next 4 bytes are 32, 7b, 23, c7, which stands for the sequence number of this TCP packet (in big endian).
+
+​	The next 4 bytes are 23, c7, 6b, 8b, which stands for the ack number of this TCP packet (in big endian).
+
+​	The next 1 byte is 50, which stands for the header length is 20 bytes.
+
+​	The next 1 byte is 0x11, which stands for the TCP control flags, and this is a FIN ACK packet.
+
+​	The next 2 bytes are 10, 00, which stands for the sender receiving window size (in big endian) is 4096.
+
+​	The next 4 bytes are 00, 00, 00, 00, which stands for the TCP packet checksum (in big endian).
+
+![check7-9](./demo/check7-9.png)
+
+​	The first 2 bytes are 7f, fd, which means the TCP source port number (in big endian).
+
+​    The next 2 bytes are 10, 00 which stands for the TCP destination port number (in big endian).
+
+​	The next 4 bytes are 6b, 8b, 45, a8, which stands for the sequence number of this TCP packet (in big endian).
+
+​	The next 4 bytes are 32, 7b, 23, c8, which stands for the ack number of this TCP packet (in big endian).
+
+​	The next 1 byte is 50, which stands for the header length is 20 bytes.
+
+​	The next 1 byte is 0x10, which stands for the TCP control flags, and this is a ACK packet.
+
+​	The next 2 bytes are 10, 00, which stands for the sender receiving window size (in big endian) is 4096.
+
+​	The next 4 bytes are 00, 00, 00, 00, which stands for the TCP packet checksum (in big endian).
+
+
+
+### Checkpoint 8
+
+#### 1. Topology
+
+​	  The topology we use is the same as the checkpoint7. Please checkout checkpoint7 for further details.
+
+#### 2. Usage 
+
+​	 To check out checkpoint8, please execute the following command in the directory of miniTCP in the terminal.
+
+```shell
+python3 script/check8.py -install
+```
+
+
+
+​	After checking out the checkpoint9, please execute the following command to delete the configuration generated by vnetUtils.
+
+```shell
+python3 script/check8.py -delete
+```
+
+
+
+​	In order to capture packets from the network with network number NS (1 or 2), please execute the following command in the miniTCP directory **instead of the build directory**.
+
+```shell
+bash script/capture_ns.sh NS
+```
+
+
+
+#### 3. Result
+
+![checkpoint8](./demo/checkpoint8.png)
+
+​	The result might not be the same, since netem may drop packet randomly.
+
+​	As the trace in wireshark shows, the packet transfer from 10.102.1.1 to 10.102.1.2 with sequence number 9736 is dropped by veth1-2. When the retransmission timer is timeout, it retransmits the packet with sequence number 9736 and 11192 (the frame #140 and #141). Finally these two packets are acknowledged by the frame #142 and #143.
+
+
+
+### Checkpoint 9
+
+#### 1. Topology
+
+​	  The topology and the IP configuration is the same as checkpoint4, please see checkpoint4 above.
+
+
+
+#### 2. Usage
+
+To check out checkpoint9, please execute the following command in the directory of miniTCP in the terminal.
+
+```shell
+python3 script/check9.py -install
+```
+
+
+
+After checking out the checkpoint9, please execute the following command to delete the configuration generated by vnetUtils.
+
+```shell
+python3 script/check9.py -delete
+```
+
+
+
+#### 3. Result
+
+Only the result of the server and the client would be shown, here is the result of echo_server and echo_client.
+
+![checkpoint9](./demo/checkpoint9.png)
+
+
+
+### Checkpoint 10
+
+#### 1. Topology
+
+​	  The topology and the IP configuration is the same as checkpoint4, please see checkpoint4 above.
+
+#### 2. Usage
+
+To check out checkpoint9, please execute the following command in the directory of miniTCP in the terminal.
+
+```shell
+python3 script/check10.py -install
+```
+
+ 
+
+After checking out the checkpoint9, please execute the following command to delete the configuration generated by vnetUtils.
+
+```shell
+python3 script/check10.py -delete
+```
+
+
+
+#### 3. Result
+
+Only the result of the server and the client would be shown, here is the result of perf_server and perf_client.
+
+![checkpoint10](./demo/checkpoint10.png)
+
+
 

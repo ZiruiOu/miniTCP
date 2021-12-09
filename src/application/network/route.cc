@@ -30,18 +30,18 @@ int LinkCallback(const void *buffer, int length, int device_id) {
 
     mac_t device_mac = device_ptr->GetMacAddress();
 
-    char *packet_content = (char *)(buffer + 14);
+    char *packet_content = (char *)buffer + 14;
     MINITCP_ASSERT(device_ptr) << "getDevicePointer error" << std::endl;
 
     if (std::strncmp((const char *)src_mac, (const char *)&device_mac,
                      sizeof(device_mac)) != 0) {
         if (ethernet_type == kEtherRouteType) {
-            network::receiveDVTableCallback(buffer + 14);
+            network::receiveDVTableCallback((char *)buffer + 14);
         } else if (ethernet_type == kEtherArpType) {
             ethernet::receiveArpCallback(
                 buffer + 14, sizeof(ethernet::ArpHeader), device_id);
         } else {
-            char *packet_content = (char *)(buffer + 14);
+            char *packet_content = (char *)buffer + 14;
             MINITCP_ASSERT(device_ptr) << "getDevicePointer error" << std::endl;
             std::cout << "device " << device_ptr->GetName() << " receive "
                       << length << " bytes, and the message is "

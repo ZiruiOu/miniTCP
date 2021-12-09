@@ -17,9 +17,9 @@
 #include <map>
 #include <string>
 
+#include "./src/common/intrusive.h"
 #include "./src/common/logging.h"
 #include "./src/ethernet/device.h"
-
 using namespace minitcp;
 
 int main(int argc, char* argv[]) { return 0; }

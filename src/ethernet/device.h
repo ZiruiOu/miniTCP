@@ -44,6 +44,8 @@ int broadcastArp();
 
 int getDeviceNumber();
 
+ip_t getLocalIP();
+
 /**
  * Start the ethernet kernel
  *
